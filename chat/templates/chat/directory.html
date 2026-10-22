@@ -1,0 +1,15 @@
+{% extends "chat/base.html" %}
+{% block title %}People - EdgeChat{% endblock %}
+{% block body %}
+<div class="page">
+  <h1>Employees</h1>
+  <p class="muted">Everyone in {{ user.company.name }}. Green dot means active right now.</p>
+  <div class="toolbar">
+    <input id="dir-q" class="search" type="search" placeholder="Search by name, title or department" autocomplete="off">
+    <div class="seg small"><label class="seg-opt"><input type="radio" name="flt" value="all" checked><span>All</span></label>
+      <label class="seg-opt"><input type="radio" name="flt" value="online"><span>Online</span></label></div>
+  </div>
+  <div id="dir-grid" class="dir-grid" data-endpoint="{% url 'api_employees' %}" data-chat="{% url 'chat' %}"></div>
+</div>
+{% endblock %}
+{% block scripts %}{% load static %}<script src="{% static 'chat/directory.js' %}"></script>{% endblock %}

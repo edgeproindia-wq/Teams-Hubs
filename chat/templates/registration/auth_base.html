@@ -1,0 +1,20 @@
+{% load static %}<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{% block title %}EdgeChat{% endblock %}</title>
+<link rel="stylesheet" href="{% static 'chat/app.css' %}">
+</head><body class="auth-body">
+<div class="auth-split">
+  <aside class="auth-side">
+    <div class="brand"><span class="logo">E</span> EdgeChat</div>
+    <h1>Your company's private workspace for conversations.</h1>
+    <ul class="ticks">
+      <li>Real-time private messaging</li>
+      <li>See who is online right now</li>
+      <li>AI copilot to draft professional messages</li>
+      <li>Each company's data is fully isolated</li>
+    </ul>
+  </aside>
+  <main class="auth-main"><div class="auth-card">{% block content %}{% endblock %}</div></main>
+</div>
+</body></html>

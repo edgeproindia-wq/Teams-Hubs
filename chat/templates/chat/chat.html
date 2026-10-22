@@ -1,0 +1,48 @@
+{% extends "chat/base.html" %}
+{% block title %}Chat - EdgeChat{% endblock %}
+{% block body %}
+<div class="chat" id="chat-root" data-me="{{ user.id }}" data-with="{{ with_id }}"
+     data-api-emp="{% url 'api_employees' %}" data-api-msg="{% url 'api_messages' 0 %}"
+     data-api-ai="{% url 'api_copilot' %}" data-csrf="{{ csrf_token }}">
+  <aside class="contacts">
+    <div class="c-head"><input id="c-q" class="search" type="search" placeholder="Search people to message" autocomplete="off"></div>
+    <div class="tabs"><button class="tab on" data-f="all">All</button><button class="tab" data-f="online">Online</button><button class="tab" data-f="unread">Unread</button></div>
+    <div id="c-list" class="c-list"></div>
+  </aside>
+  <section class="convo">
+    <div id="empty" class="empty"><div class="big">&#128172;</div><h3>Select a person to start chatting</h3><p class="muted">Use the search box to find a colleague by name.</p><p class="hint">Notice: messages here are company data and may be reviewed by your company admins.</p></div>
+    <div id="thread" class="thread" hidden>
+      <div class="t-head">
+        <span class="avatar" id="t-av"></span>
+        <div><strong id="t-name"></strong><small id="t-sub"></small></div>
+        <button class="btn ghost sm" id="ai-toggle" type="button">&#10024; Copilot</button>
+      </div>
+      <div id="t-msgs" class="t-msgs"></div>
+      <div id="t-typing" class="typing" hidden>typing&hellip;</div>
+      <div class="composer">
+        <textarea id="t-input" rows="1" maxlength="2000" placeholder="Type a message. Enter to send, Shift+Enter for a new line"></textarea>
+        <button id="t-send" class="btn primary" type="button">Send</button>
+      </div>
+      <div id="conn" class="conn" hidden>Reconnecting&hellip;</div>
+    </div>
+  </section>
+  <aside class="copilot" id="copilot">
+    <div class="cp-head"><strong>&#10024; AI Copilot</strong><small>{% if ai_enabled %}Powered by Claude{% else %}Offline drafter (add ANTHROPIC_API_KEY for full AI){% endif %}</small></div>
+    <p class="muted">Type your idea in the message box, then pick a helper.</p>
+    <label class="tone">Tone
+      <select id="cp-tone"><option value="professional">Professional</option><option value="friendly">Friendly</option><option value="formal">Formal</option><option value="concise">Concise</option></select></label>
+    <div class="cp-actions">
+      <button class="btn ghost" data-a="draft">Draft from my idea</button>
+      <button class="btn ghost" data-a="improve">Improve my text</button>
+      <button class="btn ghost" data-a="shorten">Make it shorter</button>
+      <button class="btn ghost" data-a="reply">Suggest a reply</button>
+    </div>
+    <div id="cp-out" class="cp-out" hidden>
+      <div id="cp-text" class="cp-text"></div>
+      <button class="btn primary sm" id="cp-use" type="button">Use this message</button>
+    </div>
+    <div id="cp-err" class="field-err"></div>
+  </aside>
+</div>
+{% endblock %}
+{% block scripts %}{% load static %}<script src="{% static 'chat/chat.js' %}"></script>{% endblock %}

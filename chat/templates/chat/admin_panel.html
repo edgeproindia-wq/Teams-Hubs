@@ -1,0 +1,48 @@
+{% extends "chat/base.html" %}
+{% block title %}Admin - EdgeChat{% endblock %}
+{% block body %}
+<div class="page">
+  <div class="between"><h1>Admin dashboard</h1><a class="btn ghost" href="{% url 'admin_messages' %}">View all messages</a></div>
+  <p class="muted">Company: <strong>{{ company.name }}</strong>. Only admins of this company can see this page.</p>
+  <div class="cards six">
+    <div class="stat"><small>Total users</small><b>{{ stats.total }}</b></div>
+    <div class="stat"><small>Active accounts</small><b>{{ stats.active }}</b></div>
+    <div class="stat"><small>Online now</small><b>{{ stats.online }}</b></div>
+    <div class="stat"><small>Admins</small><b>{{ stats.admins }}</b></div>
+    <div class="stat"><small>Messages (all time)</small><b>{{ stats.messages }}</b></div>
+    <div class="stat"><small>Messages today</small><b>{{ stats.today }}</b></div>
+  </div>
+  <section class="panel">
+    <div class="panel-h"><h3>Join code</h3></div>
+    <div class="pad between">
+      <div>Share this code with employees so they can register: <code class="code">{{ company.join_code }}</code></div>
+      <form method="post" action="{% url 'admin_regenerate_code' %}">{% csrf_token %}<button class="btn ghost sm" type="submit">Generate new code</button></form>
+    </div>
+  </section>
+  <section class="panel">
+    <div class="panel-h"><h3>All employees</h3></div>
+    <div class="table-wrap"><table class="table">
+      <thead><tr><th>Name</th><th>Email</th><th>Title / Dept</th><th>Role</th><th>Status</th><th>Last seen</th><th>Joined</th><th></th></tr></thead>
+      <tbody>
+      {% for u in users %}
+      <tr class="{% if not u.is_active %}dim{% endif %}">
+        <td><span class="avatar sm">{{ u.initials }}</span> {{ u.display_name }}</td>
+        <td>{{ u.email }}</td>
+        <td>{{ u.job_title|default:"-" }}{% if u.department %} / {{ u.department }}{% endif %}</td>
+        <td>{{ u.get_role_display }}</td>
+        <td>{% if not u.is_active %}<span class="pill off">Deactivated</span>{% elif u.is_online or u.pk == user.pk %}<span class="pill on">Online</span>{% else %}<span class="pill">Offline</span>{% endif %}</td>
+        <td>{% if u.last_seen %}{{ u.last_seen|date:"d M, H:i" }}{% else %}-{% endif %}</td>
+        <td>{{ u.date_joined|date:"d M Y" }}</td>
+        <td class="actions">
+          <a class="btn ghost sm" href="{% url 'admin_messages' %}?a={{ u.id }}">Messages</a>
+          {% if u.pk != user.pk %}
+          <form method="post" action="{% url 'admin_user_action' u.id %}">{% csrf_token %}<input type="hidden" name="action" value="toggle_role"><button class="btn ghost sm" type="submit">{% if u.role == 'ADMIN' %}Make employee{% else %}Make admin{% endif %}</button></form>
+          <form method="post" action="{% url 'admin_user_action' u.id %}">{% csrf_token %}<input type="hidden" name="action" value="toggle_active"><button class="btn ghost sm" type="submit">{% if u.is_active %}Deactivate{% else %}Reactivate{% endif %}</button></form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody></table></div>
+  </section>
+</div>
+{% endblock %}

@@ -1,0 +1,35 @@
+{% extends "chat/base.html" %}
+{% block title %}Dashboard - EdgeChat{% endblock %}
+{% block body %}
+<div class="page">
+  <h1>Hello, {{ user.first_name|default:user.display_name }}</h1>
+  <p class="muted">Here is what is happening in {{ user.company.name }} today.</p>
+  <div class="cards">
+    <div class="stat"><small>Employees</small><b>{{ stats.employees }}</b></div>
+    <div class="stat"><small>Online now</small><b id="stat-online">{{ stats.online }}</b></div>
+    <div class="stat"><small>Unread messages</small><b>{{ stats.unread }}</b></div>
+    <div class="stat"><small>My messages today</small><b>{{ stats.today }}</b></div>
+  </div>
+  <div class="grid2">
+    <section class="panel">
+      <div class="panel-h"><h3>Active now</h3><a href="{% url 'directory' %}">All employees</a></div>
+      <div id="online-list" data-endpoint="{% url 'api_employees' %}?online=1">
+        {% for u in online_users %}
+        <a class="person" href="{% url 'chat' %}?with={{ u.id }}"><span class="avatar">{{ u.initials }}<i class="dot on"></i></span>
+          <div><strong>{{ u.display_name }}</strong><small>{{ u.job_title|default:"Employee" }}</small></div></a>
+        {% empty %}<p class="muted pad">No one else is online right now.</p>{% endfor %}
+      </div>
+    </section>
+    <section class="panel">
+      <div class="panel-h"><h3>Recent conversations</h3><a href="{% url 'chat' %}">Open chat</a></div>
+      {% for r in recent %}
+      <a class="person" href="{% url 'chat' %}?with={{ r.peer.id }}"><span class="avatar">{{ r.peer.initials }}</span>
+        <div><strong>{{ r.peer.display_name }}</strong><small>{% if r.mine %}You: {% endif %}{{ r.last.body|truncatechars:60 }}</small></div></a>
+      {% empty %}<p class="muted pad">No conversations yet. Pick someone from People and say hi.</p>{% endfor %}
+    </section>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+{% load static %}<script src="{% static 'chat/dashboard.js' %}"></script>
+{% endblock %}

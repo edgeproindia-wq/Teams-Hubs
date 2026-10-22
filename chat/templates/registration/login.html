@@ -1,0 +1,16 @@
+{% extends "registration/auth_base.html" %}
+{% block title %}Log in - EdgeChat{% endblock %}
+{% block content %}
+<h2>Welcome back</h2>
+<p class="muted">Log in with your work email.</p>
+{% if form.non_field_errors %}<div class="alert error">{% for e in form.non_field_errors %}{{ e }}{% endfor %}</div>{% endif %}
+<form method="post" novalidate>{% csrf_token %}
+  <input type="hidden" name="next" value="{{ next }}">
+  <label>{{ form.username.label }}{{ form.username }}</label>
+  {% for e in form.username.errors %}<div class="field-err">{{ e }}</div>{% endfor %}
+  <label>{{ form.password.label }}{{ form.password }}</label>
+  {% for e in form.password.errors %}<div class="field-err">{{ e }}</div>{% endfor %}
+  <button class="btn primary block" type="submit">Log in</button>
+</form>
+<p class="muted center">New here? <a href="{% url 'register' %}">Create a company</a> or <a href="{% url 'register' %}?mode=join">join with a code</a></p>
+{% endblock %}

@@ -1,0 +1,25 @@
+{% extends "chat/base.html" %}
+{% block title %}All messages - EdgeChat{% endblock %}
+{% block body %}
+<div class="page">
+  <div class="between"><h1>All company messages</h1><a class="btn ghost" href="{% url 'admin_panel' %}">Back to admin</a></div>
+  <div class="alert info">Read-only view for company admins of your own company. Employees see a notice in Chat that company messages may be reviewed by admins.</div>
+  <form class="toolbar" method="get">
+    <select name="a"><option value="">Anyone</option>{% for p in people %}<option value="{{ p.id }}" {% if a == p.id|stringformat:"s" %}selected{% endif %}>{{ p.display_name }}</option>{% endfor %}</select>
+    <select name="b"><option value="">with anyone</option>{% for p in people %}<option value="{{ p.id }}" {% if b == p.id|stringformat:"s" %}selected{% endif %}>{{ p.display_name }}</option>{% endfor %}</select>
+    <input class="search" name="q" value="{{ q }}" placeholder="Search message text">
+    <button class="btn primary" type="submit">Filter</button>
+  </form>
+  <section class="panel"><div class="table-wrap"><table class="table">
+    <thead><tr><th>When</th><th>From</th><th>To</th><th>Message</th><th>Read</th></tr></thead>
+    <tbody>
+    {% for m in msgs %}<tr><td>{{ m.created_at|date:"d M Y, H:i" }}</td><td>{{ m.sender.display_name }}</td><td>{{ m.recipient.display_name }}</td><td class="wrap">{{ m.body }}</td><td>{% if m.read_at %}Yes{% else %}No{% endif %}</td></tr>
+    {% empty %}<tr><td colspan="5" class="muted pad">No messages found.</td></tr>{% endfor %}
+    </tbody></table></div></section>
+  <div class="pager">
+    {% if msgs.has_previous %}<a class="btn ghost sm" href="?a={{ a }}&b={{ b }}&q={{ q|urlencode }}&page={{ msgs.previous_page_number }}">Previous</a>{% endif %}
+    <span class="muted">Page {{ msgs.number }} of {{ msgs.paginator.num_pages }}</span>
+    {% if msgs.has_next %}<a class="btn ghost sm" href="?a={{ a }}&b={{ b }}&q={{ q|urlencode }}&page={{ msgs.next_page_number }}">Next</a>{% endif %}
+  </div>
+</div>
+{% endblock %}
