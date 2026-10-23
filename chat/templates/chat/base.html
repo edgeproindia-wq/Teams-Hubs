@@ -3,33 +3,51 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{% block title %}EdgeChat{% endblock %}</title>
 <link rel="stylesheet" href="{% static 'chat/app.css' %}">
-</head><body>
-<div class="shell">
-  <nav class="rail">
-    <div class="logo sm" title="EdgeChat">E</div>
-    <a href="{% url 'dashboard' %}" class="{% if page == 'dashboard' %}on{% endif %}" title="Dashboard">
-      <svg viewBox="0 0 24 24"><path d="M3 3h8v8H3zM13 3h8v5h-8zM13 10h8v11h-8zM3 13h8v8H3z"/></svg><span>Home</span></a>
-    <a href="{% url 'chat' %}" class="{% if page == 'chat' %}on{% endif %}" title="Chat">
-      <svg viewBox="0 0 24 24"><path d="M4 4h16a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H9l-5 4V5a1 1 0 0 1 1-1z"/></svg><span>Chat</span></a>
-    <a href="{% url 'directory' %}" class="{% if page == 'directory' %}on{% endif %}" title="Employees">
-      <svg viewBox="0 0 24 24"><path d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm8 0a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM2 20c0-3.3 3.1-6 7-6s7 2.7 7 6zm14.5-5.8c3 .3 5.5 2.3 5.5 5.8h-4.5c0-2.2-.4-4-1-5.8z"/></svg><span>People</span></a>
-    {% if user.is_company_admin %}
-    <a href="{% url 'admin_panel' %}" class="{% if page == 'admin' %}on{% endif %}" title="Admin">
-      <svg viewBox="0 0 24 24"><path d="M12 2l8 3v6c0 5-3.4 9.4-8 11-4.6-1.6-8-6-8-11V5z"/></svg><span>Admin</span></a>
-    {% endif %}
-  </nav>
-  <div class="main">
-    <header class="topbar">
-      <div class="co">{{ user.company.name }}</div>
-      <div class="who">
-        <span class="avatar">{{ user.initials }}</span>
-        <div class="who-t"><strong>{{ user.display_name }}</strong><small>{{ user.get_role_display }}</small></div>
-        <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="btn ghost sm" type="submit">Log out</button></form>
+</head><body class="app-body">
+<div class="app">
+  <header class="hdr">
+    <div class="hbrand"><span class="logo">E</span>
+      <div><b>EdgeChat</b><small>{{ user.company.name }}</small></div></div>
+    <div class="hright">
+      <span class="conn-pill"><i class="dot on" id="net-dot"></i><span id="net-text">Connected</span></span>
+      <span class="hname">{{ user.display_name }}</span>
+      <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="hbtn" type="submit">Log out</button></form>
+    </div>
+  </header>
+  <div class="layout">
+    <aside class="side">
+      <div class="profile">
+        <span class="avatar lg">{{ user.initials }}</span>
+        <div class="pinfo">
+          <strong>{{ user.display_name }}</strong>
+          <small>{{ user.department|default:user.job_title|default:"Employee" }}</small>
+          <span class="avail"><i class="dot on"></i> Available</span>
+        </div>
       </div>
-    </header>
-    {% if messages %}<div class="flash">{% for m in messages %}<div class="alert {{ m.tags }}">{{ m }}</div>{% endfor %}</div>{% endif %}
-    {% block body %}{% endblock %}
+      <nav class="menu">
+        <a href="{% url 'dashboard' %}" class="{% if page == 'dashboard' %}on{% endif %}">
+          <svg viewBox="0 0 24 24"><path d="M3 3h8v8H3zM13 3h8v5h-8zM13 10h8v11h-8zM3 13h8v8H3z"/></svg>Dashboard</a>
+        <a href="{% url 'chat' %}" class="{% if page == 'chat' %}on{% endif %}">
+          <svg viewBox="0 0 24 24"><path d="M4 4h16a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H9l-5 4V5a1 1 0 0 1 1-1z"/></svg>Messages</a>
+        <a href="{% url 'directory' %}" class="{% if page == 'directory' %}on{% endif %}">
+          <svg viewBox="0 0 24 24"><path d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm8 0a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM2 20c0-3.3 3.1-6 7-6s7 2.7 7 6zm14.5-5.8c3 .3 5.5 2.3 5.5 5.8h-4.5c0-2.2-.4-4-1-5.8z"/></svg>People</a>
+        {% if user.is_company_admin %}
+        <a href="{% url 'admin_panel' %}" class="{% if page == 'admin' %}on{% endif %}">
+          <svg viewBox="0 0 24 24"><path d="M12 2l8 3v6c0 5-3.4 9.4-8 11-4.6-1.6-8-6-8-11V5z"/></svg>Admin</a>
+        {% endif %}
+      </nav>
+      {% block sidebar_extra %}{% endblock %}
+    </aside>
+    <main class="content">
+      {% if messages %}<div class="flash">{% for m in messages %}<div class="alert {{ m.tags }}">{{ m }}</div>{% endfor %}</div>{% endif %}
+      {% block body %}{% endblock %}
+    </main>
   </div>
+  <footer class="foot">
+    <span><i class="dot on" id="foot-dot"></i> EdgeChat &nbsp; <span id="foot-text">Connected to company server</span></span>
+    <span>EdgeChat v1.0</span>
+  </footer>
 </div>
+<script src="{% static 'chat/shell.js' %}"></script>
 {% block scripts %}{% endblock %}
 </body></html>

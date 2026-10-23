@@ -1,16 +1,30 @@
 {% extends "chat/base.html" %}
-{% block title %}Chat - EdgeChat{% endblock %}
+{% block title %}Messages - EdgeChat{% endblock %}
+{% block sidebar_extra %}
+<section class="contacts">
+  <div class="c-title"><span>CONTACTS</span><span class="count" id="c-count">0</span></div>
+  <div class="c-head">
+    <div class="searchbox">
+      <svg viewBox="0 0 24 24"><path d="M15.5 14h-.8l-.3-.3A6.5 6.5 0 1 0 14 15.5l.3.3v.8l5 5 1.5-1.5zm-6 0a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9z"/></svg>
+      <input id="c-q" type="text" placeholder="Find employee&hellip;" autocomplete="off">
+      <button id="c-clear" type="button" title="Clear" hidden>&times;</button>
+    </div>
+  </div>
+  <div class="tabs"><button class="tab on" data-f="all">All</button><button class="tab" data-f="online">Online</button><button class="tab" data-f="unread">Unread</button></div>
+  <div id="c-list" class="c-list"></div>
+</section>
+{% endblock %}
 {% block body %}
 <div class="chat" id="chat-root" data-me="{{ user.id }}" data-with="{{ with_id }}"
      data-api-emp="{% url 'api_employees' %}" data-api-msg="{% url 'api_messages' 0 %}"
      data-csrf="{{ csrf_token }}">
-  <aside class="contacts">
-    <div class="c-head"><input id="c-q" class="search" type="search" placeholder="Search people to message" autocomplete="off"></div>
-    <div class="tabs"><button class="tab on" data-f="all">All</button><button class="tab" data-f="online">Online</button><button class="tab" data-f="unread">Unread</button></div>
-    <div id="c-list" class="c-list"></div>
-  </aside>
   <section class="convo">
-    <div id="empty" class="empty"><div class="big">&#128172;</div><h3>Select a person to start chatting</h3><p class="muted">Use the search box to find a colleague by name.</p><p class="hint">Notice: messages here are company data and may be reviewed by your company admins.</p></div>
+    <div id="empty" class="empty">
+      <div class="iconbox"><svg viewBox="0 0 24 24"><path d="M4 4h16a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H9l-5 4V5a1 1 0 0 1 1-1z"/></svg></div>
+      <h3>Select a conversation</h3>
+      <p class="muted">Choose an employee from the list to start a conversation.</p>
+      <span class="notice">Messages are saved on the company server and may be reviewed by company admins</span>
+    </div>
     <div id="thread" class="thread" hidden>
       <div class="t-head">
         <span class="avatar" id="t-av"></span>

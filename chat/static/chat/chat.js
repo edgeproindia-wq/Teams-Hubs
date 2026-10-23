@@ -29,18 +29,20 @@
     });
   }
   function renderList() {
-    var list = $('c-list'); list.textContent = '';
+    var list = $('c-list'); list.textContent = ''; $('c-count').textContent = String(peers.length);
     var shown = peers.filter(function (p) {
       return filter === 'all' || (filter === 'online' && p.online) || (filter === 'unread' && p.unread > 0);
     });
     if (!shown.length) { list.appendChild(el('p', 'muted pad', query ? 'No one matches that name.' : 'Nobody here yet.')); return; }
     shown.forEach(function (p) {
       var row = el('div', 'c-item' + (active && active.id === p.id ? ' on' : ''));
-      var av = el('span', 'avatar', p.initials); av.appendChild(el('i', 'dot' + (p.online ? ' on' : '')));
+      var av = el('span', 'avatar', p.initials);
       var info = el('div', 'info'); info.appendChild(el('strong', '', p.name));
-      info.appendChild(el('small', '', p.last_message || p.job_title || 'Employee'));
+      var sub = p.last_message || [p.job_title, p.department].filter(Boolean).join(' \u00b7 ') || 'Employee';
+      info.appendChild(el('small', '', sub));
       row.appendChild(av); row.appendChild(info);
       if (p.unread) row.appendChild(el('span', 'badge', String(p.unread)));
+      row.appendChild(el('i', 'sdot' + (p.online ? ' on' : ''))); row.title = p.online ? 'Online' : 'Offline';
       row.addEventListener('click', function () { openPeer(p.id); });
       list.appendChild(row);
     });
@@ -80,8 +82,8 @@
   function connect() {
     var proto = location.protocol === 'https:' ? 'wss://' : 'ws://';
     ws = new WebSocket(proto + location.host + '/ws/chat/');
-    ws.onopen = function () { retry = 0; $('conn').hidden = true; };
-    ws.onclose = function () { $('conn').hidden = false; setTimeout(connect, Math.min(10000, 1000 * Math.pow(2, retry++))); };
+    ws.onopen = function () { retry = 0; $('conn').hidden = true; if (window.setNet) window.setNet(true); };
+    ws.onclose = function () { $('conn').hidden = false; if (window.setNet) window.setNet(false); setTimeout(connect, Math.min(10000, 1000 * Math.pow(2, retry++))); };
     ws.onmessage = function (ev) {
       var d; try { d = JSON.parse(ev.data); } catch (e) { return; }
       if (d.type === 'message') onMessage(d);
@@ -131,7 +133,8 @@
 
   // ---------- search & tabs ----------
   var st = null;
-  $('c-q').addEventListener('input', function () { var v = this.value; clearTimeout(st); st = setTimeout(function () { query = v.trim(); loadPeers(); }, 250); });
+  $('c-clear').addEventListener('click', function () { var q = $('c-q'); q.value = ''; q.dispatchEvent(new Event('input')); q.focus(); });
+  $('c-q').addEventListener('input', function () { var v = this.value; $('c-clear').hidden = !v; clearTimeout(st); st = setTimeout(function () { query = v.trim(); loadPeers(); }, 250); });
   document.querySelectorAll('.tab').forEach(function (t) {
     t.addEventListener('click', function () {
       document.querySelectorAll('.tab').forEach(function (x) { x.classList.remove('on'); });
