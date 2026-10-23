@@ -7,7 +7,8 @@ Settings (all optional, set them in Render > Environment):
   DEFAULT_COMPANY_NAME    Company to put the admin in (default: the only company, else "Bharath")
   DEFAULT_ADMIN_RESET=1   Forgot the password? Set it, redeploy once, then REMOVE it.
   DISABLE_DEFAULT_ADMIN=1 Turn this feature off.
-The account must choose its own password at first login, and an existing account is never touched.
+A password you set yourself in DEFAULT_ADMIN_PASSWORD is used as it is. A random one must be changed at first login.
+An existing account is left alone - except that, until its first login, it picks up a changed DEFAULT_ADMIN_PASSWORD.
 """
 import os
 import secrets
@@ -36,10 +37,16 @@ def ensure_default_admin(out=print):
         if reset:
             password = given or _random_password()
             user.set_password(password)
-            user.is_active, user.role, user.must_change_password = True, User.ADMIN, True
+            user.is_active, user.role, user.must_change_password = True, User.ADMIN, not given
             user.save()
             out(f"EdgeChat: password reset for Login ID '{user.username}'."
                 + ("" if given else f" Temporary password: {password}") + " REMOVE DEFAULT_ADMIN_RESET now.")
+        elif given and user.last_login is None and not user.check_password(given):
+            # nobody has logged in yet: make the account match the password now set in Render
+            user.set_password(given)
+            user.must_change_password = False
+            user.save()
+            out(f"EdgeChat: Login ID '{user.username}' now uses the password from DEFAULT_ADMIN_PASSWORD.")
         return None
 
     company = None
@@ -54,10 +61,10 @@ def ensure_default_admin(out=print):
     password = given or _random_password()
     first, _, last = name.partition(" ")
     user = User(username=username, email="", first_name=first, last_name=last, company=company,
-                role=User.ADMIN, must_change_password=True)
+                role=User.ADMIN, must_change_password=not given)
     user.set_password(password)
     user.save()
     out(f"EdgeChat: created default admin. Login ID: {username}"
-        + (" (password = DEFAULT_ADMIN_PASSWORD)" if given else f"  Temporary password: {password}")
-        + " - you must change it at first login.")
+        + (" (password = DEFAULT_ADMIN_PASSWORD)" if given
+           else f"  Temporary password: {password}  - you must change it at first login."))
     return user

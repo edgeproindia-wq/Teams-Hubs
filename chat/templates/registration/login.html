@@ -6,11 +6,26 @@
 {% if form.non_field_errors %}<div class="alert error">{% for e in form.non_field_errors %}{{ e }}{% endfor %}</div>{% endif %}
 <form method="post" novalidate>{% csrf_token %}
   <input type="hidden" name="next" value="{{ next }}">
-  <label>{{ form.username.label }}{{ form.username }}</label>
+  <label for="id_username">{{ form.username.label }}</label>
+  {{ form.username }}
   {% for e in form.username.errors %}<div class="field-err">{{ e }}</div>{% endfor %}
-  <label>{{ form.password.label }}{{ form.password }}</label>
+  <label for="id_password">{{ form.password.label }}</label>
+  <div class="pwbox">{{ form.password }}<button type="button" class="pwtoggle" id="pwtoggle" aria-label="Show password" aria-pressed="false">Show</button></div>
   {% for e in form.password.errors %}<div class="field-err">{{ e }}</div>{% endfor %}
   <button class="btn primary block" type="submit">Log in</button>
 </form>
 <p class="muted center">No account yet? Ask your company admin to add you.</p>
+<script>
+(function () {
+  var i = document.getElementById('id_password'), b = document.getElementById('pwtoggle');
+  b.addEventListener('click', function () {
+    var show = i.type === 'password';
+    i.type = show ? 'text' : 'password';
+    b.textContent = show ? 'Hide' : 'Show';
+    b.setAttribute('aria-pressed', show ? 'true' : 'false');
+    b.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+    i.focus();
+  });
+})();
+</script>
 {% endblock %}

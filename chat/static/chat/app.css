@@ -155,7 +155,6 @@ code.code.sm{font-size:13px;letter-spacing:1px;padding:2px 8px}
 .toast span{display:block;color:#33466b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .toast .tx{position:absolute;top:6px;right:8px;border:0;background:none;font-size:20px;line-height:1;color:#7d8fae;cursor:pointer}
 @keyframes tin{from{transform:translateY(10px);opacity:0}to{transform:none;opacity:1}}
-
 /* sidebar-fit: the sidebar never spills over the footer; it gets compact on shorter screens */
 .app{height:100vh;height:100dvh}
 .side{overflow-y:auto;overflow-x:hidden}
@@ -175,3 +174,8 @@ code.code.sm{font-size:13px;letter-spacing:1px;padding:2px 8px}
   .menu a{padding:7px 10px;gap:8px;font-size:13px}
   .pinfo small{display:none}
 }
+/* login: show / hide password */
+.pwbox{position:relative}
+.pwbox input{padding-right:70px}
+.pwtoggle{position:absolute;right:8px;top:calc(50% + 2px);transform:translateY(-50%);border:0;background:#e8f0fb;color:var(--blue-d);font:inherit;font-size:12px;font-weight:700;padding:5px 10px;border-radius:7px;cursor:pointer}
+.pwtoggle:hover{background:#dce9fb}

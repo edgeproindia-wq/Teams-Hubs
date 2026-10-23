@@ -638,6 +638,11 @@ class NoRegistrationTests(TestCase):
         self.assertNotContains(r, "join with a code")
         self.assertContains(r, "Login ID")
 
+    def test_login_page_has_show_hide_password_button(self):
+        r = self.client.get(reverse("login"))
+        self.assertContains(r, 'id="pwtoggle"')
+        self.assertContains(r, 'type="password"')
+
     def test_can_log_in_with_a_login_id_that_is_not_an_email(self):
         cache.clear()
         u = make_user(make_company("Acme"), "bharath", role=User.ADMIN, first="Bharath")
@@ -660,25 +665,29 @@ class DefaultAdminTests(TestCase):
             user = bootstrap.ensure_default_admin(out=lines.append)
         return user, lines
 
-    def test_creates_admin_with_given_password_and_forces_change(self):
-        u, lines = self.run_it(DEFAULT_ADMIN_PASSWORD="Given-Pass-123")
-        self.assertEqual((u.username, u.first_name, u.role, u.must_change_password), ("bharath", "Bharath", User.ADMIN, True))
-        self.assertTrue(u.check_password("Given-Pass-123"))
+    def test_creates_admin_with_the_owners_own_password(self):
+        u, lines = self.run_it(DEFAULT_ADMIN_PASSWORD="bharath@2916")
+        self.assertEqual((u.username, u.first_name, u.role, u.must_change_password), ("bharath", "Bharath", User.ADMIN, False))
+        self.assertTrue(u.check_password("bharath@2916"))
         self.assertEqual(u.company.name, "Bharath")
-        self.assertNotIn("Given-Pass-123", " ".join(lines))          # a password from env is never printed
-        self.client.post(reverse("login"), {"username": "bharath", "password": "Given-Pass-123"})
-        self.assertRedirects(self.client.get(reverse("dashboard")), reverse("password_change"))
+        self.assertNotIn("bharath@2916", " ".join(lines))            # a password from env is never printed
+        cache.clear()
+        r = self.client.post(reverse("login"), {"username": "Bharath", "password": "bharath@2916"})
+        self.assertRedirects(r, reverse("dashboard"), fetch_redirect_response=False)
+        self.assertEqual(self.client.get(reverse("dashboard")).status_code, 200)   # no forced change for the owner's choice
 
     def test_random_password_is_printed_once_when_none_given(self):
         u, lines = self.run_it()
         pw = lines[0].split("Temporary password: ")[1].split(" ")[0]
         self.assertEqual(len(pw), 14)
         self.assertTrue(u.check_password(pw))
+        self.assertTrue(u.must_change_password)                      # a random password must be replaced
 
     def test_is_idempotent_and_never_touches_an_existing_account(self):
         u, _ = self.run_it(DEFAULT_ADMIN_PASSWORD="First-Pass-123")
         u.set_password("My-Own-Pass-77")
         u.must_change_password = False
+        u.last_login = timezone.now()                                # the owner has logged in at least once
         u.save()
         again, lines = self.run_it(DEFAULT_ADMIN_PASSWORD="Other-Pass-999")
         self.assertIsNone(again)
@@ -686,6 +695,17 @@ class DefaultAdminTests(TestCase):
         u.refresh_from_db()
         self.assertTrue(u.check_password("My-Own-Pass-77"))
         self.assertEqual(User.objects.count(), 1)
+
+    def test_changed_password_in_render_applies_until_first_login(self):
+        u, _ = self.run_it()                                         # first deploy without a password: random one
+        self.assertTrue(u.must_change_password)
+        _, lines = self.run_it(DEFAULT_ADMIN_PASSWORD="bharath@2916")  # owner then sets the password in Render
+        u.refresh_from_db()
+        self.assertTrue(u.check_password("bharath@2916"))
+        self.assertFalse(u.must_change_password)
+        self.assertEqual(len(lines), 1)
+        _, lines = self.run_it(DEFAULT_ADMIN_PASSWORD="bharath@2916")  # same password again: nothing to do
+        self.assertEqual(lines, [])
 
     def test_reset_flag_recovers_a_forgotten_password(self):
         u, _ = self.run_it(DEFAULT_ADMIN_PASSWORD="First-Pass-123")
@@ -695,7 +715,8 @@ class DefaultAdminTests(TestCase):
         self.run_it(DEFAULT_ADMIN_PASSWORD="Recover-Pass-55", DEFAULT_ADMIN_RESET="1")
         u.refresh_from_db()
         self.assertTrue(u.check_password("Recover-Pass-55"))
-        self.assertTrue(u.is_active and u.must_change_password)
+        self.assertTrue(u.is_active)
+        self.assertFalse(u.must_change_password)                      # password given by the owner
 
     def test_joins_the_only_existing_company(self):
         existing = make_company("Bharath Steel")
