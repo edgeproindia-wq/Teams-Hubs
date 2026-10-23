@@ -1,0 +1,25 @@
+databases:
+  - name: edgechat-db
+    databaseName: edgechat
+    user: edgechat
+    plan: free
+
+services:
+  - type: web
+    name: edgechat
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python manage.py collectstatic --noinput && python manage.py migrate --noinput && daphne -b 0.0.0.0 -p $PORT config.asgi:application
+    healthCheckPath: /health/
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.3
+      - key: DEBUG
+        value: "0"
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: edgechat-db
+          property: connectionString
