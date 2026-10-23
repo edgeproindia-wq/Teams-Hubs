@@ -23,48 +23,6 @@ def make_user(company, email, role=User.EMPLOYEE, first="Test", last="User", pw=
     return u
 
 
-class RegistrationTests(TestCase):
-    def payload(self, **kw):
-        d = {"mode": "create", "company_name": "Acme Ltd", "join_code": "", "full_name": "Asha Rao",
-             "email": "asha@acme.com", "job_title": "CEO", "department": "Mgmt",
-             "password1": "Str0ng-pass-99", "password2": "Str0ng-pass-99"}
-        d.update(kw)
-        return d
-
-    def test_create_company_makes_admin_and_logs_in(self):
-        r = self.client.post(reverse("register"), self.payload())
-        self.assertRedirects(r, reverse("dashboard"))
-        u = User.objects.get(email="asha@acme.com")
-        self.assertEqual(u.role, User.ADMIN)
-        self.assertEqual(u.company.name, "Acme Ltd")
-        self.assertEqual(self.client.get(reverse("dashboard")).status_code, 200)
-
-    def test_join_with_code_makes_employee(self):
-        c = make_company()
-        r = self.client.post(reverse("register"), self.payload(
-            mode="join", join_code=c.join_code.lower(), email="ravi@acme.com", full_name="Ravi K"))
-        self.assertRedirects(r, reverse("dashboard"))
-        u = User.objects.get(email="ravi@acme.com")
-        self.assertEqual((u.company_id, u.role), (c.id, User.EMPLOYEE))
-
-    def test_bad_join_code_rejected(self):
-        r = self.client.post(reverse("register"), self.payload(mode="join", join_code="ZZZZZZZZ"))
-        self.assertEqual(r.status_code, 200)
-        self.assertFalse(User.objects.exists())
-
-    def test_duplicate_email_and_weak_password_rejected(self):
-        make_user(make_company(), "asha@acme.com")
-        self.assertFalse(self.client.post(reverse("register"), self.payload()).status_code == 302)
-        r = self.client.post(reverse("register"), self.payload(email="new@acme.com", password1="12345678", password2="12345678"))
-        self.assertEqual(r.status_code, 200)
-        self.assertFalse(User.objects.filter(email="new@acme.com").exists())
-
-    def test_password_mismatch_rejected(self):
-        r = self.client.post(reverse("register"), self.payload(password2="different-pass-1"))
-        self.assertEqual(r.status_code, 200)
-        self.assertFalse(User.objects.exists())
-
-
 class LoginTests(TestCase):
     def setUp(self):
         cache.clear()
@@ -79,7 +37,7 @@ class LoginTests(TestCase):
     def test_wrong_password_and_lockout(self):
         for _ in range(5):
             r = self.client.post(reverse("login"), {"username": "a@acme.com", "password": "nope"})
-            self.assertContains(r, "Incorrect email or password")
+            self.assertContains(r, "Incorrect Login ID or password")
         r = self.client.post(reverse("login"), {"username": "a@acme.com", "password": "Str0ng-pass-99"})
         self.assertContains(r, "Too many failed attempts")
 
@@ -187,15 +145,11 @@ class AdminTests(TestCase):
         self.assertTrue(self.admin.is_active)
         self.assertEqual(self.admin.role, User.ADMIN)
 
-    def test_promote_employee_and_new_code(self):
+    def test_promote_employee(self):
         self.client.force_login(self.admin)
         self.client.post(reverse("admin_user_action", args=[self.emp.id]), {"action": "toggle_role"})
         self.emp.refresh_from_db()
         self.assertEqual(self.emp.role, User.ADMIN)
-        old = self.c.join_code
-        self.client.post(reverse("admin_regenerate_code"))
-        self.c.refresh_from_db()
-        self.assertNotEqual(old, self.c.join_code)
 
     def test_message_filters(self):
         self.client.force_login(self.admin)
@@ -665,3 +619,95 @@ class LiveFeatureTests(TransactionTestCase):
         comm.scope["user"] = u3
         ok, _ = await comm.connect()
         self.assertFalse(ok)
+
+
+# ---------------------------------------------------------------- no self-registration + default admin
+class NoRegistrationTests(TestCase):
+    def test_register_page_is_gone(self):
+        r = self.client.get("/register/")
+        self.assertRedirects(r, reverse("login"), fetch_redirect_response=False)
+        r = self.client.post("/register/", {"mode": "create", "company_name": "Evil", "full_name": "Eve Il",
+                                            "email": "eve@evil.com", "password1": "Str0ng-pass-99",
+                                            "password2": "Str0ng-pass-99"})
+        self.assertEqual(r.status_code, 302)
+        self.assertFalse(User.objects.exists() or Company.objects.exists())     # nothing was created
+
+    def test_login_page_has_no_register_links(self):
+        r = self.client.get(reverse("login"))
+        self.assertNotContains(r, "Create a company")
+        self.assertNotContains(r, "join with a code")
+        self.assertContains(r, "Login ID")
+
+    def test_can_log_in_with_a_login_id_that_is_not_an_email(self):
+        cache.clear()
+        u = make_user(make_company("Acme"), "bharath", role=User.ADMIN, first="Bharath")
+        r = self.client.post(reverse("login"), {"username": "  BHARATH ", "password": "Str0ng-pass-99"})
+        self.assertRedirects(r, reverse("dashboard"), fetch_redirect_response=False)
+        self.assertEqual(int(self.client.session["_auth_user_id"]), u.id)
+
+
+class DefaultAdminTests(TestCase):
+    def run_it(self, **env):
+        from unittest import mock
+        from . import bootstrap
+        lines = []
+        with mock.patch.dict("os.environ", env, clear=False):
+            for k in ("DEFAULT_ADMIN_USERNAME", "DEFAULT_ADMIN_NAME", "DEFAULT_ADMIN_PASSWORD", "DEFAULT_COMPANY_NAME",
+                      "DEFAULT_ADMIN_RESET", "DISABLE_DEFAULT_ADMIN"):
+                if k not in env:
+                    import os
+                    os.environ.pop(k, None)
+            user = bootstrap.ensure_default_admin(out=lines.append)
+        return user, lines
+
+    def test_creates_admin_with_given_password_and_forces_change(self):
+        u, lines = self.run_it(DEFAULT_ADMIN_PASSWORD="Given-Pass-123")
+        self.assertEqual((u.username, u.first_name, u.role, u.must_change_password), ("bharath", "Bharath", User.ADMIN, True))
+        self.assertTrue(u.check_password("Given-Pass-123"))
+        self.assertEqual(u.company.name, "Bharath")
+        self.assertNotIn("Given-Pass-123", " ".join(lines))          # a password from env is never printed
+        self.client.post(reverse("login"), {"username": "bharath", "password": "Given-Pass-123"})
+        self.assertRedirects(self.client.get(reverse("dashboard")), reverse("password_change"))
+
+    def test_random_password_is_printed_once_when_none_given(self):
+        u, lines = self.run_it()
+        pw = lines[0].split("Temporary password: ")[1].split(" ")[0]
+        self.assertEqual(len(pw), 14)
+        self.assertTrue(u.check_password(pw))
+
+    def test_is_idempotent_and_never_touches_an_existing_account(self):
+        u, _ = self.run_it(DEFAULT_ADMIN_PASSWORD="First-Pass-123")
+        u.set_password("My-Own-Pass-77")
+        u.must_change_password = False
+        u.save()
+        again, lines = self.run_it(DEFAULT_ADMIN_PASSWORD="Other-Pass-999")
+        self.assertIsNone(again)
+        self.assertEqual(lines, [])
+        u.refresh_from_db()
+        self.assertTrue(u.check_password("My-Own-Pass-77"))
+        self.assertEqual(User.objects.count(), 1)
+
+    def test_reset_flag_recovers_a_forgotten_password(self):
+        u, _ = self.run_it(DEFAULT_ADMIN_PASSWORD="First-Pass-123")
+        u.is_active = False
+        u.must_change_password = False
+        u.save()
+        self.run_it(DEFAULT_ADMIN_PASSWORD="Recover-Pass-55", DEFAULT_ADMIN_RESET="1")
+        u.refresh_from_db()
+        self.assertTrue(u.check_password("Recover-Pass-55"))
+        self.assertTrue(u.is_active and u.must_change_password)
+
+    def test_joins_the_only_existing_company(self):
+        existing = make_company("Bharath Steel")
+        u, _ = self.run_it(DEFAULT_ADMIN_PASSWORD="Given-Pass-123")
+        self.assertEqual(u.company_id, existing.id)
+        self.assertEqual(Company.objects.count(), 1)
+
+    def test_custom_names_and_disable_switch(self):
+        u, _ = self.run_it(DEFAULT_ADMIN_USERNAME="Boss", DEFAULT_ADMIN_NAME="Big Boss",
+                           DEFAULT_COMPANY_NAME="Edge Pro", DEFAULT_ADMIN_PASSWORD="Given-Pass-123")
+        self.assertEqual((u.username, u.first_name, u.last_name, u.company.name), ("boss", "Big", "Boss", "Edge Pro"))
+        User.objects.all().delete()
+        none, _ = self.run_it(DISABLE_DEFAULT_ADMIN="1")
+        self.assertIsNone(none)
+        self.assertFalse(User.objects.exists())

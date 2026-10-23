@@ -3,7 +3,6 @@ import json
 import logging
 
 from django.contrib import messages
-from django.contrib.auth import login as auth_login
 from django.contrib.auth.views import LoginView, PasswordChangeView
 from django.core.cache import cache
 from django.core.paginator import Paginator
@@ -17,7 +16,7 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET, require_POST
 
 from . import importer
-from .forms import LoginForm, RegisterForm
+from .forms import LoginForm
 from .models import Group, GroupMember, Message, User
 from .permissions import api_login_required, company_admin_required, member_required
 from .realtime import notify
@@ -67,18 +66,6 @@ class RateLimitedLoginView(LoginView):
     def form_valid(self, form):
         cache.delete(self._key(self.request))
         return super().form_valid(form)
-
-
-def register(request):
-    if request.user.is_authenticated:
-        return redirect("dashboard")
-    form = RegisterForm(request.POST or None, initial={"mode": request.GET.get("mode", "create")})
-    if request.method == "POST" and form.is_valid():
-        user = form.save()
-        auth_login(request, user, backend="django.contrib.auth.backends.ModelBackend")
-        messages.success(request, f"Welcome, {user.first_name}! Your account is ready.")
-        return redirect("dashboard")
-    return render(request, "registration/register.html", {"form": form})
 
 
 # ---------------------------------------------------------------- helpers
@@ -382,14 +369,6 @@ def admin_user_action(request, user_id):
             messages.success(request, f"{target.display_name} is now {target.get_role_display()}.")
     else:
         messages.error(request, "Unknown action.")
-    return redirect("admin_panel")
-
-
-@company_admin_required
-@require_POST
-def admin_regenerate_code(request):
-    request.user.company.regenerate_code()
-    messages.success(request, "A new join code was generated. The old code no longer works.")
     return redirect("admin_panel")
 
 

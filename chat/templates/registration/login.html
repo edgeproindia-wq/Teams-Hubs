@@ -2,7 +2,7 @@
 {% block title %}Log in - EdgeChat{% endblock %}
 {% block content %}
 <h2>Welcome back</h2>
-<p class="muted">Log in with your work email.</p>
+<p class="muted">Log in with your Login ID and password.</p>
 {% if form.non_field_errors %}<div class="alert error">{% for e in form.non_field_errors %}{{ e }}{% endfor %}</div>{% endif %}
 <form method="post" novalidate>{% csrf_token %}
   <input type="hidden" name="next" value="{{ next }}">
@@ -12,5 +12,5 @@
   {% for e in form.password.errors %}<div class="field-err">{{ e }}</div>{% endfor %}
   <button class="btn primary block" type="submit">Log in</button>
 </form>
-<p class="muted center">New here? <a href="{% url 'register' %}">Create a company</a> or <a href="{% url 'register' %}?mode=join">join with a code</a></p>
+<p class="muted center">No account yet? Ask your company admin to add you.</p>
 {% endblock %}
