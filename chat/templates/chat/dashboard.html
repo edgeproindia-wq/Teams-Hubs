@@ -24,7 +24,7 @@
       <div class="panel-h"><h3>Recent conversations</h3><a href="{% url 'chat' %}">Open chat</a></div>
       {% for r in recent %}
       <a class="person" href="{% url 'chat' %}?with={{ r.peer.id }}"><span class="avatar">{{ r.peer.initials }}</span>
-        <div><strong>{{ r.peer.display_name }}</strong><small>{% if r.mine %}You: {% endif %}{{ r.last.body|truncatechars:60 }}</small></div></a>
+        <div><strong>{{ r.peer.display_name }}</strong><small>{% if r.mine %}You: {% endif %}{{ r.preview }}</small></div></a>
       {% empty %}<p class="muted pad">No conversations yet. Pick someone from People and say hi.</p>{% endfor %}
     </section>
   </div>

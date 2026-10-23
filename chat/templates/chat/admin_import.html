@@ -1,0 +1,20 @@
+{% extends "chat/base.html" %}
+{% block title %}Import employees - EdgeChat{% endblock %}
+{% block body %}
+<div class="page">
+  <div class="between"><h1>Import employees from Excel</h1><a class="btn ghost" href="{% url 'admin_panel' %}">Back to admin</a></div>
+  <p class="muted">Add many employees at once. Each person gets an account and a temporary password, and must choose their own password at first login.</p>
+  {% if error %}<div class="alert error">{{ error }}</div>{% endif %}
+  <div class="panel"><div class="pad">
+    <ol class="steps">
+      <li><a href="{% url 'admin_import_template' %}">Download the Excel template</a>.</li>
+      <li>Fill the <b>Employees</b> sheet: <b>Name</b> and <b>Email</b> are required; <b>Job Title</b> and <b>Department</b> are optional.</li>
+      <li>Save it as .xlsx and upload it here (up to {{ max_rows }} employees per file).</li>
+    </ol>
+    <form method="post" enctype="multipart/form-data">{% csrf_token %}
+      <input type="file" name="file" accept=".xlsx" required>
+      <button class="btn primary" type="submit" style="margin-top:12px">Import</button>
+    </form>
+  </div></div>
+</div>
+{% endblock %}

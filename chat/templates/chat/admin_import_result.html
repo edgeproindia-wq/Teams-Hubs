@@ -1,0 +1,23 @@
+{% extends "chat/base.html" %}
+{% block title %}Import result - EdgeChat{% endblock %}
+{% block body %}
+<div class="page">
+  <div class="between"><h1>Import finished</h1><a class="btn ghost" href="{% url 'admin_panel' %}">Back to admin</a></div>
+  <div class="cards"><div class="stat"><small>Accounts created</small><b>{{ created|length }}</b></div>
+    <div class="stat"><small>Rows skipped</small><b>{{ skipped|length }}</b></div></div>
+  {% if created %}
+  <div class="alert info">Temporary passwords are shown <b>only on this page</b>. Download the Excel copy now and share each password privately.</div>
+  <p><a class="btn primary" download="new_employee_accounts.xlsx" href="{{ download }}">Download accounts as Excel</a></p>
+  <section class="panel"><div class="panel-h"><h3>Created accounts</h3></div><div class="table-wrap"><table class="table">
+    <thead><tr><th>Row</th><th>Name</th><th>Email</th><th>Temporary password</th><th>Job title</th><th>Department</th></tr></thead>
+    <tbody>{% for u in created %}<tr><td>{{ u.row }}</td><td>{{ u.name }}</td><td>{{ u.email }}</td><td><code class="code sm">{{ u.password }}</code></td><td>{{ u.job_title }}</td><td>{{ u.department }}</td></tr>{% endfor %}</tbody>
+  </table></div></section>
+  {% endif %}
+  {% if skipped %}
+  <section class="panel"><div class="panel-h"><h3>Skipped rows</h3></div><div class="table-wrap"><table class="table">
+    <thead><tr><th>Row</th><th>Name</th><th>Email</th><th>Reason</th></tr></thead>
+    <tbody>{% for u in skipped %}<tr><td>{{ u.row }}</td><td>{{ u.name }}</td><td>{{ u.email }}</td><td>{{ u.reason }}</td></tr>{% endfor %}</tbody>
+  </table></div></section>
+  {% endif %}
+</div>
+{% endblock %}

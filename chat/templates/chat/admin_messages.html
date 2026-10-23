@@ -11,9 +11,9 @@
     <button class="btn primary" type="submit">Filter</button>
   </form>
   <section class="panel"><div class="table-wrap"><table class="table">
-    <thead><tr><th>When</th><th>From</th><th>To</th><th>Message</th><th>Read</th></tr></thead>
+    <thead><tr><th>When</th><th>From</th><th>To</th><th>Message</th><th>Seen</th></tr></thead>
     <tbody>
-    {% for m in msgs %}<tr><td>{{ m.created_at|date:"d M Y, H:i" }}</td><td>{{ m.sender.display_name }}</td><td>{{ m.recipient.display_name }}</td><td class="wrap">{{ m.body }}</td><td>{% if m.read_at %}Yes{% else %}No{% endif %}</td></tr>
+    {% for m in msgs %}<tr><td>{{ m.created_at|date:"d M Y, H:i" }}</td><td>{{ m.sender.display_name }}</td><td>{% if m.group %}Group: {{ m.group.name }}{% else %}{{ m.recipient.display_name }}{% endif %}</td><td class="wrap">{% if m.deleted_at %}<em class="muted">(deleted by sender)</em>{% else %}{{ m.body }}{% endif %}</td><td>{% if m.group %}-{% elif m.read_at %}Seen{% else %}No{% endif %}</td></tr>
     {% empty %}<tr><td colspan="5" class="muted pad">No messages found.</td></tr>{% endfor %}
     </tbody></table></div></section>
   <div class="pager">

@@ -2,7 +2,9 @@
 {% block title %}Admin - EdgeChat{% endblock %}
 {% block body %}
 <div class="page">
-  <div class="between"><h1>Admin dashboard</h1><a class="btn ghost" href="{% url 'admin_messages' %}">View all messages</a></div>
+  <div class="between"><h1>Admin dashboard</h1>
+    <div class="actions"><a class="btn primary" href="{% url 'admin_import' %}">Import employees (Excel)</a>
+    <a class="btn ghost" href="{% url 'admin_messages' %}">View all messages</a></div></div>
   <p class="muted">Company: <strong>{{ company.name }}</strong>. Only admins of this company can see this page.</p>
   <div class="cards six">
     <div class="stat"><small>Total users</small><b>{{ stats.total }}</b></div>

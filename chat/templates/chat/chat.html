@@ -2,7 +2,9 @@
 {% block title %}Messages - EdgeChat{% endblock %}
 {% block sidebar_extra %}
 <section class="contacts">
-  <div class="c-title"><span>CONTACTS</span><span class="count" id="c-count">0</span></div>
+  <div class="c-title"><span id="c-title-text">CONTACTS</span>
+    <span class="c-right">{% if user.is_company_admin %}<a class="imp" href="{% url 'admin_import' %}" title="Import employees from Excel">Import Excel</a>{% endif %}<span class="count" id="c-count">0</span></span></div>
+  <div class="modes"><button class="mode on" data-m="people" type="button">People</button><button class="mode" data-m="groups" type="button">Groups</button></div>
   <div class="c-head">
     <div class="searchbox">
       <svg viewBox="0 0 24 24"><path d="M15.5 14h-.8l-.3-.3A6.5 6.5 0 1 0 14 15.5l.3.3v.8l5 5 1.5-1.5zm-6 0a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9z"/></svg>
@@ -10,25 +12,27 @@
       <button id="c-clear" type="button" title="Clear" hidden>&times;</button>
     </div>
   </div>
-  <div class="tabs"><button class="tab on" data-f="all">All</button><button class="tab" data-f="online">Online</button><button class="tab" data-f="unread">Unread</button></div>
+  <div class="tabs" id="c-tabs"><button class="tab on" data-f="all">All</button><button class="tab" data-f="online">Online</button><button class="tab" data-f="unread">Unread</button></div>
+  <div class="gnew" id="g-newbox" hidden><button id="g-new" class="btn primary sm block" type="button">+ New group</button></div>
   <div id="c-list" class="c-list"></div>
 </section>
 {% endblock %}
 {% block body %}
-<div class="chat" id="chat-root" data-me="{{ user.id }}" data-with="{{ with_id }}"
+<div class="chat" id="chat-root" data-me="{{ user.id }}" data-with="{{ with_id }}" data-group="{{ group_id }}"
      data-api-emp="{% url 'api_employees' %}" data-api-msg="{% url 'api_messages' 0 %}"
-     data-csrf="{{ csrf_token }}">
+     data-api-groups="{% url 'api_groups' %}" data-csrf="{{ csrf_token }}">
   <section class="convo">
     <div id="empty" class="empty">
       <div class="iconbox"><svg viewBox="0 0 24 24"><path d="M4 4h16a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H9l-5 4V5a1 1 0 0 1 1-1z"/></svg></div>
       <h3>Select a conversation</h3>
-      <p class="muted">Choose an employee from the list to start a conversation.</p>
+      <p class="muted">Choose an employee or a group from the list to start a conversation.</p>
       <span class="notice">Messages are saved on the company server and may be reviewed by company admins</span>
     </div>
     <div id="thread" class="thread" hidden>
       <div class="t-head">
         <span class="avatar" id="t-av"></span>
         <div><strong id="t-name"></strong><small id="t-sub"></small></div>
+        <button class="btn ghost sm" id="t-members" type="button" hidden>Members</button>
       </div>
       <div id="t-msgs" class="t-msgs"></div>
       <div id="t-typing" class="typing" hidden>typing&hellip;</div>
@@ -40,5 +44,6 @@
     </div>
   </section>
 </div>
+<div id="modal" class="modal" hidden><div class="modal-card"><div id="modal-body"></div></div></div>
 {% endblock %}
 {% block scripts %}{% load static %}<script src="{% static 'chat/chat.js' %}"></script>{% endblock %}

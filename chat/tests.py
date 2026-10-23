@@ -1,10 +1,14 @@
+import io
+import json
+
 from channels.routing import URLRouter
 from channels.testing import WebsocketCommunicator
 from django.core.cache import cache
 from django.test import TestCase, TransactionTestCase
 from django.urls import reverse
+from django.utils import timezone
 
-from .models import Company, Message, User
+from .models import Company, Group, GroupMember, Message, User
 from .routing import websocket_urlpatterns
 
 
@@ -306,5 +310,357 @@ class SocketTests(TransactionTestCase):
         from django.contrib.auth.models import AnonymousUser
         comm = WebsocketCommunicator(URLRouter(websocket_urlpatterns), "/ws/chat/")
         comm.scope["user"] = AnonymousUser()
+        ok, _ = await comm.connect()
+        self.assertFalse(ok)
+
+
+# ---------------------------------------------------------------- groups
+class GroupApiTests(TestCase):
+    def setUp(self):
+        cache.clear()
+        self.a, self.b = make_company("A"), make_company("B")
+        self.u1 = make_user(self.a, "u1@a.com", first="One")
+        self.u2 = make_user(self.a, "u2@a.com", first="Two")
+        self.u3 = make_user(self.a, "u3@a.com", first="Three")
+        self.x = make_user(self.b, "x@b.com", first="Ex")
+        self.client.force_login(self.u1)
+
+    def post(self, url, data=None):
+        return self.client.post(url, json.dumps(data or {}), content_type="application/json")
+
+    def make(self, members=None, name="Team"):
+        r = self.post(reverse("api_groups"), {"name": name, "member_ids": members or [self.u2.id, self.u3.id]})
+        self.assertEqual(r.status_code, 201, r.content)
+        return r.json()["id"]
+
+    def test_create_and_list(self):
+        gid = self.make()
+        g = Group.objects.get(pk=gid)
+        self.assertEqual((g.created_by_id, g.company_id, g.memberships.count()), (self.u1.id, self.a.id, 3))
+        lst = self.client.get(reverse("api_groups")).json()["groups"]
+        self.assertEqual([(x["name"], x["members"], x["is_owner"]) for x in lst], [("Team", 3, True)])
+
+    def test_create_validation(self):
+        url = reverse("api_groups")
+        self.assertEqual(self.post(url, {"name": "  ", "member_ids": [self.u2.id]}).status_code, 400)
+        self.assertEqual(self.post(url, {"name": "Solo", "member_ids": []}).status_code, 400)
+        self.assertEqual(self.post(url, {"name": "Leak", "member_ids": [self.x.id]}).status_code, 400)  # other company
+        self.assertEqual(Group.objects.count(), 0)
+        gid = self.make([self.u2.id, self.x.id])
+        self.assertEqual(GroupMember.objects.filter(group_id=gid).count(), 2)   # x silently not added
+
+    def test_only_members_can_open(self):
+        gid = self.make([self.u2.id])
+        self.client.force_login(self.u3)
+        self.assertEqual(self.client.get(reverse("api_group_detail", args=[gid])).status_code, 404)
+        self.client.force_login(self.x)
+        self.assertEqual(self.client.get(reverse("api_group_detail", args=[gid])).status_code, 404)
+        self.client.force_login(self.u2)
+        j = self.client.get(reverse("api_group_detail", args=[gid])).json()
+        self.assertEqual(len(j["group"]["members"]), 2)
+        self.assertFalse(j["group"]["is_owner"])
+
+    def test_group_messages_in_detail_and_unread(self):
+        gid = self.make([self.u2.id])
+        Message.objects.create(company=self.a, sender=self.u1, group_id=gid, body="hi team")
+        self.client.force_login(self.u2)
+        self.assertEqual(self.client.get(reverse("api_groups")).json()["groups"][0]["unread"], 1)
+        j = self.client.get(reverse("api_group_detail", args=[gid])).json()
+        self.assertEqual(j["messages"][0]["body"], "hi team")
+        self.assertEqual(j["messages"][0]["sender_name"], "One User")
+        self.assertEqual(self.client.get(reverse("api_groups")).json()["groups"][0]["unread"], 0)
+
+    def test_group_messages_stay_out_of_private_views(self):
+        gid = self.make([self.u2.id])
+        Message.objects.create(company=self.a, sender=self.u1, group_id=gid, body="group only")
+        emp = self.client.get(reverse("api_employees")).json()["employees"]
+        self.assertTrue(all(e["last_message"] == "" for e in emp))
+        self.assertEqual(self.client.get(reverse("api_messages", args=[self.u2.id])).json()["messages"], [])
+        self.assertEqual(self.client.get(reverse("dashboard")).status_code, 200)
+
+    def test_add_members_owner_only(self):
+        gid = self.make([self.u2.id])
+        url = reverse("api_group_add", args=[gid])
+        self.assertEqual(self.post(url, {"user_ids": [self.u3.id, self.x.id]}).json()["added"], 1)
+        self.client.force_login(self.u2)
+        self.assertEqual(self.post(url, {"user_ids": [self.u3.id]}).status_code, 403)
+
+    def test_remove_leave_transfer_and_delete(self):
+        gid = self.make([self.u2.id, self.u3.id])
+        rm = lambda uid: reverse("api_group_remove", args=[gid, uid])
+        self.client.force_login(self.u2)                                   # member cannot remove others
+        self.assertEqual(self.post(rm(self.u3.id)).status_code, 403)
+        self.assertEqual(self.post(rm(self.u2.id)).status_code, 200)       # but can leave
+        self.client.force_login(self.u1)
+        self.assertEqual(self.post(rm(self.u3.id)).status_code, 200)       # owner removes
+        self.assertEqual(GroupMember.objects.filter(group_id=gid).count(), 1)
+        gid2 = self.make([self.u2.id], name="Two")
+        self.post(reverse("api_group_remove", args=[gid2, self.u1.id]))     # owner leaves -> transfer
+        self.assertEqual(Group.objects.get(pk=gid2).created_by_id, self.u2.id)
+        self.client.force_login(self.u2)
+        self.post(reverse("api_group_remove", args=[gid2, self.u2.id]))     # last one leaves -> group gone
+        self.assertFalse(Group.objects.filter(pk=gid2).exists())
+
+    def test_seen_via_api_marks_read(self):
+        Message.objects.create(company=self.a, sender=self.u1, recipient=self.u2, body="yo")
+        self.client.force_login(self.u2)
+        self.client.get(reverse("api_messages", args=[self.u1.id]))
+        self.assertIsNotNone(Message.objects.get(body="yo").read_at)
+        self.client.force_login(self.u1)
+        m = self.client.get(reverse("api_messages", args=[self.u2.id])).json()["messages"][0]
+        self.assertTrue(m["read"])
+
+    def test_admin_audit_shows_group_and_deleted(self):
+        self.u1.role = User.ADMIN
+        self.u1.save()
+        gid = self.make([self.u2.id])
+        Message.objects.create(company=self.a, sender=self.u2, group_id=gid, body="group text")
+        Message.objects.create(company=self.a, sender=self.u2, group_id=gid, body="", deleted_at=timezone.now())
+        r = self.client.get(reverse("admin_messages"))
+        self.assertContains(r, "Group: Team")
+        self.assertContains(r, "group text")
+        self.assertContains(r, "deleted by sender")
+
+
+# ---------------------------------------------------------------- Excel import + forced password change
+def make_xlsx(rows, headers=("Name", "Email", "Job Title", "Department")):
+    from openpyxl import Workbook
+    wb = Workbook()
+    ws = wb.active
+    if headers:
+        ws.append(list(headers))
+    for r in rows:
+        ws.append(list(r))
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    buf.name = "employees.xlsx"
+    return buf
+
+
+class ImportTests(TestCase):
+    def setUp(self):
+        cache.clear()
+        self.c = make_company("Acme")
+        self.admin = make_user(self.c, "admin@acme.com", role=User.ADMIN, first="Boss")
+        self.emp = make_user(self.c, "emp@acme.com")
+        self.client.force_login(self.admin)
+        self.url = reverse("admin_import")
+
+    def upload(self, f):
+        return self.client.post(self.url, {"file": f})
+
+    def test_import_creates_accounts_with_temp_passwords(self):
+        r = self.upload(make_xlsx([("Priya Sharma", "Priya@Acme.com", "Detailer", "Detailing"),
+                                   ("Ravi K", "ravi@acme.com", "", "")]))
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(len(r.context["created"]), 2)
+        self.assertContains(r, "data:application/vnd.openxmlformats")
+        u = User.objects.get(username="priya@acme.com")
+        self.assertEqual((u.company_id, u.role, u.job_title, u.must_change_password),
+                         (self.c.id, User.EMPLOYEE, "Detailer", True))
+        pw = r.context["created"][0]["password"]
+        self.assertTrue(u.check_password(pw))
+        self.assertNotIn(pw, u.password)            # stored hashed, not plain
+
+    def test_skips_bad_duplicate_and_existing_rows(self):
+        r = self.upload(make_xlsx([("Good One", "good@acme.com", "", ""), ("Dup", "GOOD@acme.com", "", ""),
+                                   ("Bad Mail", "not-an-email", "", ""), ("", "noname@acme.com", "", ""),
+                                   ("Existing", "emp@acme.com", "", "")]))
+        self.assertEqual([c["email"] for c in r.context["created"]], ["good@acme.com"])
+        reasons = sorted(s["reason"] for s in r.context["skipped"])
+        self.assertEqual(len(reasons), 4)
+        self.assertTrue(any("already has an account" in x for x in reasons))
+        self.assertTrue(any("Duplicate" in x for x in reasons))
+
+    def test_headings_are_flexible_and_required(self):
+        r = self.upload(make_xlsx([("Meena", "meena@acme.com", "HR")], headers=("Employee Name", "E-mail", "Designation")))
+        self.assertEqual(User.objects.get(username="meena@acme.com").job_title, "HR")
+        r = self.upload(make_xlsx([("x", "y")], headers=("Foo", "Bar")))
+        self.assertContains(r, "must have the headings")
+
+    def test_rejects_wrong_file_and_too_many_rows(self):
+        self.assertContains(self.client.post(self.url, {"file": io.BytesIO(b"hello")}), "ending in .xlsx")
+        bad = io.BytesIO(b"not a real workbook")
+        bad.name = "x.xlsx"
+        self.assertContains(self.upload(bad), "Could not read this file")
+        many = make_xlsx([(f"P{i}", f"p{i}@acme.com", "", "") for i in range(101)])
+        self.assertContains(self.upload(many), "Too many rows")
+        self.assertEqual(User.objects.filter(company=self.c).count(), 2)
+
+    def test_employee_cannot_import(self):
+        self.client.force_login(self.emp)
+        self.assertEqual(self.client.get(self.url).status_code, 403)
+        self.assertEqual(self.upload(make_xlsx([("A", "a@acme.com", "", "")])).status_code, 403)
+        self.assertEqual(self.client.get(reverse("admin_import_template")).status_code, 403)
+
+    def test_import_only_into_own_company(self):
+        other = make_company("Other")
+        self.upload(make_xlsx([("New", "new@acme.com", "", "")]))
+        self.assertEqual(User.objects.get(username="new@acme.com").company_id, self.c.id)
+        self.assertEqual(other.users.count(), 0)
+
+    def test_template_download_is_a_valid_workbook(self):
+        from openpyxl import load_workbook
+        r = self.client.get(reverse("admin_import_template"))
+        wb = load_workbook(io.BytesIO(r.content))
+        self.assertEqual([c.value for c in wb["Employees"][1]], ["Name", "Email", "Job Title", "Department"])
+        self.assertEqual(wb["Employees"].max_row, 1)       # template itself has no sample employee to import by accident
+
+    def test_credentials_export_never_makes_formulas(self):
+        from openpyxl import load_workbook
+        from . import importer
+        data = importer.credentials_xlsx([{"name": "=1+1", "email": "e@acme.com", "password": "pw",
+                                           "job_title": "@x", "department": "+y"}])
+        ws = load_workbook(io.BytesIO(data)).active
+        self.assertEqual(ws["A2"].data_type, "s")
+        self.assertEqual(ws["A2"].value, "=1+1")
+
+    def test_imported_user_must_change_password_then_can_chat(self):
+        r = self.upload(make_xlsx([("New Hire", "hire@acme.com", "", "")]))
+        pw = r.context["created"][0]["password"]
+        self.client.logout()
+        self.assertRedirects(self.client.post(reverse("login"), {"username": "hire@acme.com", "password": pw}),
+                             reverse("dashboard"), fetch_redirect_response=False)
+        for name in ("dashboard", "chat", "directory"):
+            self.assertRedirects(self.client.get(reverse(name)), reverse("password_change"))
+        self.assertEqual(self.client.get(reverse("api_employees")).status_code, 403)
+        self.assertEqual(self.client.get(reverse("password_change")).status_code, 200)
+        bad = self.client.post(reverse("password_change"), {"old_password": pw, "new_password1": "12345678",
+                                                            "new_password2": "12345678"})
+        self.assertEqual(bad.status_code, 200)
+        self.assertTrue(User.objects.get(username="hire@acme.com").must_change_password)
+        ok = self.client.post(reverse("password_change"), {"old_password": pw, "new_password1": "My-New-Pass-77",
+                                                           "new_password2": "My-New-Pass-77"})
+        self.assertRedirects(ok, reverse("dashboard"))
+        self.assertFalse(User.objects.get(username="hire@acme.com").must_change_password)
+        self.assertEqual(self.client.get(reverse("chat")).status_code, 200)
+
+    def test_normal_user_can_change_password(self):
+        self.client.force_login(self.emp)
+        r = self.client.post(reverse("password_change"), {"old_password": "Str0ng-pass-99",
+                                                          "new_password1": "Another-Pass-55", "new_password2": "Another-Pass-55"})
+        self.assertRedirects(r, reverse("dashboard"))
+
+
+# ---------------------------------------------------------------- live group / seen / delete
+class LiveFeatureTests(TransactionTestCase):
+    def setUp(self):
+        self.a, self.b = make_company("A"), make_company("B")
+        self.u1 = make_user(self.a, "u1@a.com", first="One")
+        self.u2 = make_user(self.a, "u2@a.com", first="Two")
+        self.u3 = make_user(self.a, "u3@a.com", first="Three")
+        self.x = make_user(self.b, "x@b.com", first="Ex")
+        self.g = Group.objects.create(company=self.a, name="Team", created_by=self.u1)
+        for u in (self.u1, self.u2):
+            GroupMember.objects.create(group=self.g, user=u)
+
+    async def _connect(self, user):
+        comm = WebsocketCommunicator(URLRouter(websocket_urlpatterns), "/ws/chat/")
+        comm.scope["user"] = user
+        ok, _ = await comm.connect()
+        assert ok
+        return comm
+
+    async def _drain(self, comm):
+        out = []
+        while not await comm.receive_nothing(timeout=0.2):
+            out.append(await comm.receive_json_from())
+        return out
+
+    async def test_group_message_reaches_members_only(self):
+        c1, c2, c3 = await self._connect(self.u1), await self._connect(self.u2), await self._connect(self.u3)
+        for c in (c1, c2, c3):
+            await self._drain(c)
+        await c1.send_json_to({"type": "group_message", "group": self.g.id, "body": "hello team"})
+        got2 = [m for m in await self._drain(c2) if m["type"] == "message"]
+        got1 = [m for m in await self._drain(c1) if m["type"] == "message"]
+        self.assertEqual((got2[0]["body"], got2[0]["group"], got2[0]["sender_name"]), ("hello team", self.g.id, "One User"))
+        self.assertEqual(got1[0]["body"], "hello team")
+        self.assertEqual([m for m in await self._drain(c3) if m["type"] == "message"], [])
+        m = await Message.objects.aget(body="hello team")
+        self.assertEqual((m.group_id, m.recipient_id), (self.g.id, None))
+        for c in (c1, c2, c3):
+            await c.disconnect()
+
+    async def test_non_member_and_other_company_cannot_post_to_group(self):
+        c3, cx = await self._connect(self.u3), await self._connect(self.x)
+        for c in (c3, cx):
+            await self._drain(c)
+            await c.send_json_to({"type": "group_message", "group": self.g.id, "body": "sneaky"})
+            self.assertEqual((await c.receive_json_from())["type"], "error")
+        self.assertEqual(await Message.objects.acount(), 0)
+        for c in (c3, cx):
+            await c.disconnect()
+
+    async def test_delete_own_message_only(self):
+        c1, c2 = await self._connect(self.u1), await self._connect(self.u2)
+        for c in (c1, c2):
+            await self._drain(c)
+        await c1.send_json_to({"type": "message", "to": self.u2.id, "body": "oops secret"})
+        await self._drain(c1)
+        await self._drain(c2)
+        mid = (await Message.objects.aget(body="oops secret")).id
+        await c2.send_json_to({"type": "delete", "id": mid})                     # receiver cannot delete it
+        self.assertEqual((await c2.receive_json_from())["type"], "error")
+        self.assertTrue(await Message.objects.filter(pk=mid, deleted_at__isnull=True).aexists())
+        await c1.send_json_to({"type": "delete", "id": mid})                     # sender can
+        ev1 = [m for m in await self._drain(c1) if m["type"] == "deleted"]
+        ev2 = [m for m in await self._drain(c2) if m["type"] == "deleted"]
+        self.assertEqual((ev1[0]["id"], ev2[0]["id"]), (mid, mid))
+        m = await Message.objects.aget(pk=mid)
+        self.assertEqual((m.body, m.deleted_at is not None), ("", True))         # text really erased
+        await c1.send_json_to({"type": "delete", "id": mid})                     # already deleted
+        self.assertEqual((await c1.receive_json_from())["type"], "error")
+        for c in (c1, c2):
+            await c.disconnect()
+
+    async def test_delete_group_message_reaches_all_members(self):
+        c1, c2 = await self._connect(self.u1), await self._connect(self.u2)
+        await c2.send_json_to({"type": "group_message", "group": self.g.id, "body": "bye"})
+        await self._drain(c1)
+        await self._drain(c2)
+        mid = (await Message.objects.aget(body="bye")).id
+        await c2.send_json_to({"type": "delete", "id": mid})
+        self.assertIn(mid, [m["id"] for m in await self._drain(c1) if m["type"] == "deleted"])
+        await c1.send_json_to({"type": "delete", "id": mid})                     # not the sender
+        self.assertEqual((await c1.receive_json_from())["type"], "error")
+        for c in (c1, c2):
+            await c.disconnect()
+
+    async def test_seen_event_when_recipient_reads(self):
+        c1, c2 = await self._connect(self.u1), await self._connect(self.u2)
+        for c in (c1, c2):
+            await self._drain(c)
+        await c1.send_json_to({"type": "message", "to": self.u2.id, "body": "read me"})
+        await self._drain(c1)
+        await self._drain(c2)
+        await c2.send_json_to({"type": "read", "peer": self.u1.id})
+        self.assertIn({"type": "seen", "by": self.u2.id}, await self._drain(c1))
+        self.assertIsNotNone((await Message.objects.aget(body="read me")).read_at)
+        await c2.send_json_to({"type": "read", "peer": self.u1.id})              # nothing new -> no second event
+        self.assertEqual([m for m in await self._drain(c1) if m["type"] == "seen"], [])
+        for c in (c1, c2):
+            await c.disconnect()
+
+    async def test_seen_event_when_recipient_opens_chat_over_http(self):
+        from asgiref.sync import sync_to_async
+        from django.test import Client
+        c1 = await self._connect(self.u1)
+        await self._drain(c1)
+        await Message.objects.acreate(company=self.a, sender=self.u1, recipient=self.u2, body="hi")
+        def open_chat():
+            cl = Client()
+            cl.force_login(self.u2)
+            return cl.get(reverse("api_messages", args=[self.u1.id])).status_code
+        self.assertEqual(await sync_to_async(open_chat)(), 200)
+        self.assertIn({"type": "seen", "by": self.u2.id}, await self._drain(c1))
+        await c1.disconnect()
+
+    async def test_must_change_password_cannot_connect(self):
+        await User.objects.filter(pk=self.u3.pk).aupdate(must_change_password=True)
+        u3 = await User.objects.aget(pk=self.u3.pk)
+        comm = WebsocketCommunicator(URLRouter(websocket_urlpatterns), "/ws/chat/")
+        comm.scope["user"] = u3
         ok, _ = await comm.connect()
         self.assertFalse(ok)

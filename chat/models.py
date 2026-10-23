@@ -54,6 +54,8 @@ class User(AbstractUser):
     # Number of open websocket connections (tabs/devices) for this user.
     connections = models.PositiveIntegerField(default=0)
     last_seen = models.DateTimeField(null=True, blank=True)
+    # True for accounts created by an Excel import: they must pick their own password at first login.
+    must_change_password = models.BooleanField(default=False)
 
     @property
     def display_name(self):
@@ -81,27 +83,68 @@ class User(AbstractUser):
         )
 
 
+class Group(models.Model):
+    company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name="groups")
+    name = models.CharField(max_length=80)
+    created_by = models.ForeignKey(User, null=True, on_delete=models.SET_NULL, related_name="created_groups")
+    created_at = models.DateTimeField(default=timezone.now)
+
+    def __str__(self):
+        return self.name
+
+    @property
+    def initials(self):
+        parts = self.name.split()
+        return ("".join(p[0] for p in parts[:2]) or "#").upper()
+
+
+class GroupMember(models.Model):
+    group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name="memberships")
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="group_memberships")
+    joined_at = models.DateTimeField(default=timezone.now)
+    last_read_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["group", "user"], name="uniq_group_member")]
+
+
 class Message(models.Model):
+    """A private message (recipient set) or a group message (group set) - never both."""
     company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name="messages")
     sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name="sent_messages")
-    recipient = models.ForeignKey(User, on_delete=models.CASCADE, related_name="received_messages")
-    body = models.TextField(max_length=2000)
+    recipient = models.ForeignKey(User, null=True, blank=True, on_delete=models.CASCADE,
+                                  related_name="received_messages")
+    group = models.ForeignKey(Group, null=True, blank=True, on_delete=models.CASCADE, related_name="messages")
+    body = models.TextField(max_length=2000, blank=True)
     created_at = models.DateTimeField(default=timezone.now, db_index=True)
-    read_at = models.DateTimeField(null=True, blank=True)
+    read_at = models.DateTimeField(null=True, blank=True)       # private messages only ("seen")
+    deleted_at = models.DateTimeField(null=True, blank=True)    # set when the sender deletes it
 
     class Meta:
         ordering = ["created_at", "id"]
         indexes = [models.Index(fields=["company", "sender", "recipient", "created_at"])]
+        constraints = [models.CheckConstraint(
+            condition=(models.Q(recipient__isnull=False, group__isnull=True)
+                       | models.Q(recipient__isnull=True, group__isnull=False)),
+            name="message_private_xor_group")]
 
     def __str__(self):
-        return f"{self.sender_id}->{self.recipient_id}: {self.body[:30]}"
+        return f"{self.sender_id}->{self.recipient_id or ('g' + str(self.group_id))}: {self.body[:30]}"
+
+    @property
+    def is_deleted(self):
+        return self.deleted_at is not None
 
     def as_dict(self):
         return {
             "type": "message",
             "id": self.id,
             "sender": self.sender_id,
+            "sender_name": self.sender.display_name,
             "recipient": self.recipient_id,
-            "body": self.body,
+            "group": self.group_id,
+            "body": "" if self.is_deleted else self.body,
+            "deleted": self.is_deleted,
+            "read": self.read_at is not None,
             "created_at": self.created_at.isoformat(),
         }
