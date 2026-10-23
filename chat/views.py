@@ -410,7 +410,7 @@ def admin_import(request):
         ctx["error"] = str(exc)
         return render(request, "chat/admin_import.html", ctx)
     created, skipped = importer.import_employees(request.user.company, rows)
-    ctx.update({"created": created, "skipped": skipped})
+    ctx.update({"created": created, "skipped": skipped, "email_ignored": sum(1 for u in created if u["warn"])})
     if created:
         blob = base64.b64encode(importer.credentials_xlsx(created)).decode()
         ctx["download"] = "data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64," + blob

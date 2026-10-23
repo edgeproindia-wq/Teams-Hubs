@@ -8,7 +8,7 @@
   <div class="panel"><div class="pad">
     <ol class="steps">
       <li><a href="{% url 'admin_import_template' %}">Download the Excel template</a>.</li>
-      <li>Fill the <b>Employees</b> sheet: <b>Name</b> and <b>Email</b> are required; <b>Job Title</b> and <b>Department</b> are optional.</li>
+      <li>Fill the <b>Employees</b> sheet. Required: <b>Name</b> and an <b>Emp Code</b> (it becomes the Login ID). <b>Email</b>, <b>Job Title</b> and <b>Department</b> are optional. Without an Emp Code, the email is the Login ID.</li>
       <li>Save it as .xlsx and upload it here (up to {{ max_rows }} employees per file).</li>
     </ol>
     <form method="post" enctype="multipart/form-data">{% csrf_token %}

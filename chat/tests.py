@@ -4,7 +4,7 @@ import json
 from channels.routing import URLRouter
 from channels.testing import WebsocketCommunicator
 from django.core.cache import cache
-from django.test import TestCase, TransactionTestCase
+from django.test import TestCase, TransactionTestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -392,6 +392,8 @@ def make_xlsx(rows, headers=("Name", "Email", "Job Title", "Department")):
     return buf
 
 
+@override_settings(PASSWORD_HASHERS=["django.contrib.auth.hashers.PBKDF2PasswordHasher",
+                                     "django.contrib.auth.hashers.MD5PasswordHasher"])   # the real hasher
 class ImportTests(TestCase):
     def setUp(self):
         cache.clear()
@@ -433,12 +435,43 @@ class ImportTests(TestCase):
         r = self.upload(make_xlsx([("x", "y")], headers=("Foo", "Bar")))
         self.assertContains(r, "must have the headings")
 
+    def test_emp_code_becomes_login_id_and_headings_are_loose(self):
+        f = make_xlsx([("EPRO0023", "Veeresh Hottimath", "pradeep@acme.com", ""),
+                       ("EPRO0024", "Ameet Paradeshi", "", ""),
+                       ("EPRO0039", "Venkanna Madivalar", "venkannamadivalar_gmail.com#EXT#@acme.onmicrosoft.com", "")],
+                      headers=("Emp Code", "NAME", "Email.id"))
+        r = self.upload(f)
+        self.assertEqual([c["login"] for c in r.context["created"]], ["epro0023", "epro0024", "epro0039"])
+        u = User.objects.get(username="epro0039")
+        self.assertEqual(u.email, "venkannamadivalar@gmail.com")             # Microsoft guest id turned into the real email
+        self.assertEqual(User.objects.get(username="epro0024").email, "")    # email is optional
+        self.assertEqual(User.objects.get(username="epro0023").email, "")    # pradeep@ is not Veeresh Hottimath's email: ignored
+        self.assertEqual([bool(c["warn"]) for c in r.context["created"]], [True, False, False])
+        self.assertEqual(r.context["email_ignored"], 1)
+        self.assertContains(r, "were ignored because they do not look like the person")
+        cache.clear()
+        self.client.logout()
+        r = self.client.post(reverse("login"), {"username": "EPRO0024", "password": r.context["created"][1]["password"]})
+        self.assertRedirects(r, reverse("dashboard"), fetch_redirect_response=False)
+
+    def test_repeated_or_missing_emp_codes_are_skipped_not_guessed(self):
+        f = make_xlsx([("EPRO", "Srivatsan", "", ""), ("EPRO", "Harish", "", ""), ("EPRO0100", "Santhosh M", "", ""),
+                       ("", "No Code Person", "", ""), ("", "", "orphan@acme.com", "")],
+                      headers=("Emp Code", "Name", "Email"))
+        r = self.upload(f)
+        self.assertEqual([c["login"] for c in r.context["created"]], ["epro0100"])
+        reasons = {s["name"]: s["reason"] for s in r.context["skipped"]}
+        self.assertIn("more than one row", reasons["Srivatsan"])
+        self.assertIn("more than one row", reasons["Harish"])
+        self.assertEqual(reasons["No Code Person"], "No Emp Code or Email")
+        self.assertEqual(reasons[""], "Name is missing or too long")
+
     def test_rejects_wrong_file_and_too_many_rows(self):
         self.assertContains(self.client.post(self.url, {"file": io.BytesIO(b"hello")}), "ending in .xlsx")
         bad = io.BytesIO(b"not a real workbook")
         bad.name = "x.xlsx"
         self.assertContains(self.upload(bad), "Could not read this file")
-        many = make_xlsx([(f"P{i}", f"p{i}@acme.com", "", "") for i in range(101)])
+        many = make_xlsx([(f"P{i}", f"p{i}@acme.com", "", "") for i in range(301)])
         self.assertContains(self.upload(many), "Too many rows")
         self.assertEqual(User.objects.filter(company=self.c).count(), 2)
 
@@ -458,13 +491,13 @@ class ImportTests(TestCase):
         from openpyxl import load_workbook
         r = self.client.get(reverse("admin_import_template"))
         wb = load_workbook(io.BytesIO(r.content))
-        self.assertEqual([c.value for c in wb["Employees"][1]], ["Name", "Email", "Job Title", "Department"])
+        self.assertEqual([c.value for c in wb["Employees"][1]], ["Emp Code", "Name", "Email", "Job Title", "Department"])
         self.assertEqual(wb["Employees"].max_row, 1)       # template itself has no sample employee to import by accident
 
     def test_credentials_export_never_makes_formulas(self):
         from openpyxl import load_workbook
         from . import importer
-        data = importer.credentials_xlsx([{"name": "=1+1", "email": "e@acme.com", "password": "pw",
+        data = importer.credentials_xlsx([{"name": "=1+1", "login": "e1", "email": "e@acme.com", "password": "pw",
                                            "job_title": "@x", "department": "+y"}])
         ws = load_workbook(io.BytesIO(data)).active
         self.assertEqual(ws["A2"].data_type, "s")
@@ -489,6 +522,17 @@ class ImportTests(TestCase):
         self.assertRedirects(ok, reverse("dashboard"))
         self.assertFalse(User.objects.get(username="hire@acme.com").must_change_password)
         self.assertEqual(self.client.get(reverse("chat")).status_code, 200)
+
+    def test_temp_password_hash_is_light_then_upgraded_at_first_login(self):
+        r = self.upload(make_xlsx([("Hash Test", "hash@acme.com", "", "")]))
+        pw = r.context["created"][0]["password"]
+        u = User.objects.get(username="hash@acme.com")
+        self.assertTrue(u.password.startswith("pbkdf2_sha256$60000$"))
+        self.client.logout()
+        self.client.post(reverse("login"), {"username": "hash@acme.com", "password": pw})
+        u.refresh_from_db()
+        self.assertFalse(u.password.startswith("pbkdf2_sha256$60000$"))      # re-hashed at full strength
+        self.assertTrue(u.check_password(pw))
 
     def test_normal_user_can_change_password(self):
         self.client.force_login(self.emp)
