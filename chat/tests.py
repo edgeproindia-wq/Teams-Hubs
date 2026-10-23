@@ -1,10 +1,7 @@
-import json
-from unittest import mock
-
 from channels.routing import URLRouter
 from channels.testing import WebsocketCommunicator
 from django.core.cache import cache
-from django.test import TestCase, TransactionTestCase, override_settings
+from django.test import TestCase, TransactionTestCase
 from django.urls import reverse
 
 from .models import Company, Message, User
@@ -133,47 +130,6 @@ class IsolationAndApiTests(TestCase):
         self.a2.save()
         self.assertEqual(len(self.client.get(reverse("api_employees"), {"online": "1"}).json()["employees"]), 0)
 
-
-@override_settings(ANTHROPIC_API_KEY="")
-class CopilotTests(TestCase):
-    def setUp(self):
-        cache.clear()
-        c = make_company()
-        self.me, self.peer = make_user(c, "me@a.com", first="Me"), make_user(c, "p@a.com", first="Priya")
-        self.other = make_user(make_company("Other"), "o@o.com")
-        self.client.force_login(self.me)
-
-    def post(self, **d):
-        return self.client.post(reverse("api_copilot"), json.dumps(d), content_type="application/json")
-
-    def test_offline_draft(self):
-        r = self.post(action="draft", text="please send the report today", tone="professional", peer_id=self.peer.id)
-        self.assertEqual(r.status_code, 200)
-        self.assertEqual(r.json()["source"], "offline")
-        self.assertIn("Priya", r.json()["text"])
-
-    def test_empty_text_and_bad_action(self):
-        self.assertEqual(self.post(action="improve", text="", tone="formal").status_code, 400)
-        self.assertEqual(self.post(action="hack", text="x").status_code, 400)
-
-    @override_settings(ANTHROPIC_API_KEY="k")
-    def test_ai_success_and_failure_fallback(self):
-        with mock.patch("chat.ai._call_claude", return_value="Polished."):
-            self.assertEqual(self.post(action="improve", text="hi").json(), {"text": "Polished.", "source": "ai"})
-        with mock.patch("chat.ai._call_claude", side_effect=RuntimeError("down")):
-            r = self.post(action="improve", text="hi there")
-            self.assertEqual(r.json()["source"], "offline")
-
-    def test_other_company_peer_gives_no_context(self):
-        Message.objects.create(company=self.other.company, sender=self.other, recipient=self.other, body="private")
-        with mock.patch("chat.ai.compose", return_value={"text": "x", "source": "ai"}) as m:
-            self.post(action="draft", text="hi", peer_id=self.other.id)
-        self.assertEqual(m.call_args[0][4], [])
-
-    def test_rate_limit(self):
-        for _ in range(20):
-            self.post(action="draft", text="hi")
-        self.assertEqual(self.post(action="draft", text="hi").status_code, 429)
 
 
 class AdminTests(TestCase):

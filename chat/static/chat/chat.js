@@ -68,7 +68,7 @@
       var p = byId(id) || res.data.peer;
       if (!byId(id)) peers.unshift(p);
       p.unread = 0; active = p;
-      $('empty').hidden = true; $('thread').hidden = false; $('cp-out').hidden = true; $('cp-err').textContent = '';
+      $('empty').hidden = true; $('thread').hidden = false;
       setHeader(p);
       $('t-msgs').textContent = ''; lastDay = '';
       res.data.messages.forEach(addBubble); scrollDown();
@@ -137,28 +137,6 @@
       document.querySelectorAll('.tab').forEach(function (x) { x.classList.remove('on'); });
       t.classList.add('on'); filter = t.dataset.f; renderList();
     });
-  });
-
-  // ---------- AI copilot ----------
-  $('ai-toggle').addEventListener('click', function () {
-    if (window.innerWidth > 1100) root.classList.toggle('no-ai'); else $('copilot').classList.toggle('open');
-  });
-  document.querySelectorAll('.cp-actions button').forEach(function (btn) {
-    btn.addEventListener('click', function () {
-      if (!active) { $('cp-err').textContent = 'Open a conversation first.'; return; }
-      $('cp-err').textContent = ''; var old = btn.textContent; btn.disabled = true; btn.textContent = 'Thinking...';
-      api(root.dataset.apiAi, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: btn.dataset.a, text: $('t-input').value, tone: $('cp-tone').value, peer_id: active.id })
-      }).then(function (res) {
-        if (!res.ok) { $('cp-err').textContent = res.data.error || 'Something went wrong.'; $('cp-out').hidden = true; return; }
-        $('cp-text').textContent = res.data.text; $('cp-out').hidden = false;
-      }).catch(function () { $('cp-err').textContent = 'Could not reach the copilot.'; })
-        .then(function () { btn.disabled = false; btn.textContent = old; });
-    });
-  });
-  $('cp-use').addEventListener('click', function () {
-    var t = $('t-input'); t.value = $('cp-text').textContent; t.dispatchEvent(new Event('input')); t.focus();
   });
 
   // ---------- start ----------

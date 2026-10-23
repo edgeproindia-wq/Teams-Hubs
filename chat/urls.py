@@ -14,7 +14,6 @@ urlpatterns = [
     path("directory/", views.directory, name="directory"),
     path("api/employees/", views.api_employees, name="api_employees"),
     path("api/messages/<int:peer_id>/", views.api_messages, name="api_messages"),
-    path("api/copilot/", views.api_copilot, name="api_copilot"),
     path("admin-panel/", views.admin_panel, name="admin_panel"),
     path("admin-panel/messages/", views.admin_messages, name="admin_messages"),
     path("admin-panel/regenerate-code/", views.admin_regenerate_code, name="admin_regenerate_code"),

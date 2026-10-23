@@ -1,6 +1,4 @@
-import json
 import logging
-import time
 
 from django.contrib import messages
 from django.contrib.auth import login as auth_login
@@ -14,7 +12,6 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST
 
-from . import ai
 from .forms import LoginForm, RegisterForm
 from .models import Message, User
 from .permissions import api_login_required, company_admin_required
@@ -130,8 +127,7 @@ def _recent_conversations(me):
 
 @login_required
 def chat(request):
-    return render(request, "chat/chat.html", {
-        "page": "chat", "with_id": request.GET.get("with", ""), "ai_enabled": ai.ai_enabled()})
+    return render(request, "chat/chat.html", {"page": "chat", "with_id": request.GET.get("with", "")})
 
 
 @login_required
@@ -182,43 +178,6 @@ def api_messages(request, peer_id):
     msgs = [m.as_dict() for m in reversed(list(qs))]
     return JsonResponse({"peer": _peer_json(peer), "messages": msgs})
 
-
-@api_login_required
-@require_POST
-def api_copilot(request):
-    me = request.user
-    try:
-        data = json.loads(request.body or b"{}")
-    except ValueError:
-        return JsonResponse({"error": "Bad request."}, status=400)
-    action = data.get("action")
-    tone = data.get("tone", "professional")
-    text = str(data.get("text", "")).strip()[:2000]
-    if action not in ai.ACTIONS or tone not in ai.TONES:
-        return JsonResponse({"error": "Unknown action."}, status=400)
-
-    # light rate limit: 20 requests / minute / user
-    key = f"copilot:{me.id}:{int(time.time() // 60)}"
-    n = cache.get(key, 0) + 1
-    cache.set(key, n, 70)
-    if n > 20:
-        return JsonResponse({"error": "Slow down a little - try again in a minute."}, status=429)
-
-    peer_name, context = "your colleague", []
-    peer_id = data.get("peer_id")
-    if peer_id:
-        peer = _peers(me).filter(pk=peer_id).first()  # same-company only
-        if peer:
-            peer_name = peer.display_name
-            recent = Message.objects.filter(company_id=me.company_id).filter(
-                Q(sender=me, recipient=peer) | Q(sender=peer, recipient=me)).order_by("-created_at")[:6]
-            for m in reversed(list(recent)):
-                context.append(f"{'Me' if m.sender_id == me.id else peer.display_name}: {m.body[:300]}")
-    if action in ("improve", "shorten", "draft") and not text:
-        return JsonResponse({"error": "Type something in the message box first."}, status=400)
-    if action == "reply" and not context and not text:
-        return JsonResponse({"error": "There is no message to reply to yet."}, status=400)
-    return JsonResponse(ai.compose(action, text, tone, peer_name, context))
 
 
 # ---------------------------------------------------------------- company admin

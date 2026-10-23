@@ -66,11 +66,19 @@ TEMPLATES = [{
 }]
 
 # ---- Database --------------------------------------------------------------
-DATABASES = {
-    "default": dj_database_url.config(
-        default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}", conn_max_age=600
-    )
-}
+_db_url = os.environ.get("DATABASE_URL", "").strip()
+if _db_url:
+    if not _db_url.startswith(("postgres://", "postgresql://", "sqlite:")):
+        raise ImproperlyConfigured(
+            "DATABASE_URL must start with postgresql:// - paste only the Internal Database URL "
+            "from your Render PostgreSQL page (no 'DATABASE_URL=' text, no quotes, no spaces).")
+    DATABASES = {"default": dj_database_url.parse(_db_url, conn_max_age=600)}
+elif DEBUG or "collectstatic" in sys.argv or "test" in sys.argv:
+    DATABASES = {"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": BASE_DIR / "db.sqlite3"}}
+else:
+    raise ImproperlyConfigured(
+        "DATABASE_URL is missing or empty. Add it in Render > Environment "
+        "(value = Internal Database URL of your PostgreSQL).")
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # ---- Auth ------------------------------------------------------------------
@@ -123,10 +131,6 @@ if not DEBUG:
     CSRF_COOKIE_SECURE = True
     SECURE_HSTS_SECONDS = 31536000
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
-
-# ---- AI copilot ------------------------------------------------------------
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
-ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-5-5")
 
 LOGGING = {
     "version": 1,

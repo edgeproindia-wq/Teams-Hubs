@@ -67,8 +67,7 @@ label{display:block;font-weight:600;font-size:13px;margin:10px 0 0}
 .pill{display:inline-block;padding:2px 10px;border-radius:99px;background:#eceef6;font-size:12px;font-weight:600}.pill.on{background:#dcfce7;color:#166534}.pill.off{background:#fee2e2;color:#991b1b}
 .pager{display:flex;gap:12px;align-items:center;justify-content:center;margin:12px 0}
 /* chat */
-.chat{flex:1;display:grid;grid-template-columns:300px 1fr 300px;min-height:0}
-.chat.no-ai{grid-template-columns:300px 1fr}.chat.no-ai .copilot{display:none}
+.chat{flex:1;display:grid;grid-template-columns:300px 1fr;min-height:0}
 .contacts{background:#fff;border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
 .c-head{padding:12px}.c-head .search{margin:0}
 .tabs{display:flex;gap:6px;padding:0 12px 8px}.tab{border:0;background:#eef0f8;padding:5px 12px;border-radius:99px;cursor:pointer;font:inherit;font-size:12px;font-weight:600;color:var(--muted)}.tab.on{background:var(--brand);color:#fff}
@@ -91,11 +90,4 @@ label{display:block;font-weight:600;font-size:13px;margin:10px 0 0}
 .composer{display:flex;gap:10px;padding:12px 16px;background:#fff;border-top:1px solid var(--line);align-items:flex-end}
 .composer textarea{margin:0;resize:none;max-height:140px}
 .conn{position:absolute;top:70px;left:50%;transform:translateX(-50%);background:#fef3c7;color:#92400e;padding:4px 12px;border-radius:99px;font-size:12px}
-.copilot{background:#fff;border-left:1px solid var(--line);padding:16px;overflow:auto}
-.cp-head small{display:block;color:var(--muted);margin-top:2px}
-.tone select{margin-bottom:10px}
-.cp-actions{display:grid;gap:8px}.cp-actions .btn{text-align:left}
-.cp-out{margin-top:14px;border:1px solid #c9c9fb;background:#f5f5ff;border-radius:10px;padding:12px}
-.cp-text{white-space:pre-wrap;margin-bottom:10px}
-@media(max-width:1100px){.chat{grid-template-columns:260px 1fr}.copilot{display:none;position:fixed;right:0;top:60px;bottom:0;width:300px;z-index:5;box-shadow:-4px 0 20px rgba(0,0,0,.15)}.copilot.open{display:block}}
 @media(max-width:800px){.auth-split{grid-template-columns:1fr}.auth-side{display:none}.cards,.cards.six{grid-template-columns:1fr 1fr}.grid2{grid-template-columns:1fr}.chat{grid-template-columns:1fr}.contacts{max-height:38vh}.rail{width:60px}.row2{grid-template-columns:1fr}}
