@@ -155,3 +155,23 @@ code.code.sm{font-size:13px;letter-spacing:1px;padding:2px 8px}
 .toast span{display:block;color:#33466b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .toast .tx{position:absolute;top:6px;right:8px;border:0;background:none;font-size:20px;line-height:1;color:#7d8fae;cursor:pointer}
 @keyframes tin{from{transform:translateY(10px);opacity:0}to{transform:none;opacity:1}}
+
+/* sidebar-fit: the sidebar never spills over the footer; it gets compact on shorter screens */
+.app{height:100vh;height:100dvh}
+.side{overflow-y:auto;overflow-x:hidden}
+.contacts{flex:1 1 auto;min-height:250px}
+@media (max-height:900px){
+  .hdr{height:58px}.foot{height:30px}
+  .profile{padding:12px 16px;gap:12px}
+  .avatar.lg{width:46px;height:46px;font-size:16px;border-radius:10px}
+  .pinfo strong{font-size:15px}.pinfo small{margin:0}
+  .menu{padding:8px;gap:2px}.menu a{padding:8px 12px;gap:12px}.menu a svg{width:18px;height:18px}
+  .c-title{padding:10px 16px 4px}.modes{padding:2px 16px 6px}.mode{padding:5px}
+  .c-head{padding:4px 16px 6px}.searchbox input{padding:8px 34px 8px 36px}.tabs{padding:0 16px 6px}
+  .gnew{padding:0 16px 6px}
+}
+@media (max-height:700px){
+  .menu{display:grid;grid-template-columns:1fr 1fr}
+  .menu a{padding:7px 10px;gap:8px;font-size:13px}
+  .pinfo small{display:none}
+}
