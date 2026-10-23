@@ -72,7 +72,12 @@ if _db_url:
         raise ImproperlyConfigured(
             "DATABASE_URL must start with postgresql:// - paste only the Internal Database URL "
             "from your Render PostgreSQL page (no 'DATABASE_URL=' text, no quotes, no spaces).")
-    DATABASES = {"default": dj_database_url.parse(_db_url, conn_max_age=600)}
+    try:
+        DATABASES = {"default": dj_database_url.parse(_db_url, conn_max_age=600)}
+    except Exception:
+        raise ImproperlyConfigured(
+            "DATABASE_URL is not a valid address. It looks like a placeholder (for example ...@HOST:PORT/...) "
+            "or has special characters. Copy it again with the copy icon on your Render PostgreSQL page.") from None
     if _db_url.startswith(("postgres://", "postgresql://")):
         DATABASES["default"].setdefault("OPTIONS", {})["connect_timeout"] = 10
 elif DEBUG or "collectstatic" in sys.argv or "test" in sys.argv:
