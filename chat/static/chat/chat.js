@@ -3,7 +3,7 @@
   var ME = parseInt(root.dataset.me, 10);
   var peers = [], groups = [], mode = 'people', filter = 'all', query = '';
   var active = null;                       // {kind:'user'|'group', id, obj}
-  var ws = null, retry = 0, typingTimer = null, lastTypingSent = 0, lastDay = '', bubbles = {};
+  var typingTimer = null, lastTypingSent = 0, lastDay = '', bubbles = {}, pendingRead = false;
   var GROUPS = root.dataset.apiGroups;
   var $ = function (id) { return document.getElementById(id); };
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
@@ -94,7 +94,7 @@
   }
 
   // ================= thread =================
-  function showEmpty() { active = null; $('thread').hidden = true; $('empty').hidden = false; }
+  function showEmpty() { active = null; window.EdgeActive = null; $('thread').hidden = true; $('empty').hidden = false; }
   function header(initials, name, sub, online, isGroup) {
     var av = $('t-av'); av.textContent = initials; av.className = 'avatar' + (isGroup ? ' gav' : '');
     if (!isGroup) av.appendChild(el('i', 'dot' + (online ? ' on' : '')));
@@ -140,7 +140,7 @@
       if (!res.ok) return;
       var p = peerById(id) || res.data.peer;
       if (!peerById(id)) peers.unshift(p);
-      p.unread = 0; active = { kind: 'user', id: id, obj: p };
+      p.unread = 0; active = { kind: 'user', id: id, obj: p }; window.EdgeActive = { kind: 'user', id: id };
       $('empty').hidden = true; $('thread').hidden = false;
       header(p.initials, p.name, peerSub(p), p.online, false);
       resetMessages(res.data.messages);
@@ -151,7 +151,7 @@
     if (mode !== 'groups') { setMode('groups'); }
     return api(GROUPS + id + '/').then(function (res) {
       if (!res.ok) return;
-      var g = res.data.group; active = { kind: 'group', id: id, obj: g };
+      var g = res.data.group; active = { kind: 'group', id: id, obj: g }; window.EdgeActive = { kind: 'group', id: id };
       var li = groupById(id); if (li) { li.unread = 0; li.members = g.members.length; }
       $('empty').hidden = true; $('thread').hidden = false;
       header(g.initials, g.name, g.members.length + ' members', false, true);
@@ -167,26 +167,28 @@
     });
   }
 
-  // ================= websocket =================
+  // ================= live events (one shared socket, created in shell.js) =================
   function wsSend(obj) {
-    if (!ws || ws.readyState !== 1) { $('conn').hidden = false; return false; }
-    ws.send(JSON.stringify(obj)); return true;
+    if (!window.EdgeWS.send(obj)) { $('conn').hidden = false; return false; }
+    return true;
   }
-  function connect() {
-    var proto = location.protocol === 'https:' ? 'wss://' : 'ws://';
-    ws = new WebSocket(proto + location.host + '/ws/chat/');
-    ws.onopen = function () { retry = 0; $('conn').hidden = true; if (window.setNet) window.setNet(true); };
-    ws.onclose = function () { $('conn').hidden = false; if (window.setNet) window.setNet(false); setTimeout(connect, Math.min(10000, 1000 * Math.pow(2, retry++))); };
-    ws.onmessage = function (ev) {
-      var d; try { d = JSON.parse(ev.data); } catch (e) { return; }
-      if (d.type === 'message') (d.group ? onGroupMessage : onMessage)(d);
-      else if (d.type === 'presence') onPresence(d);
-      else if (d.type === 'typing') onTyping(d);
-      else if (d.type === 'seen') onSeen(d);
-      else if (d.type === 'deleted') onDeleted(d);
-      else if (d.type === 'groups_changed') { loadGroups().then(refreshGroupHeader); }
-      else if (d.type === 'error') alert(d.error);
-    };
+  window.EdgeWS.on('open', function () { $('conn').hidden = true; });
+  window.EdgeWS.on('close', function () { $('conn').hidden = false; });
+  window.EdgeWS.on('message', function (m) { (m.group ? onGroupMessage : onMessage)(m); });
+  window.EdgeWS.on('presence', onPresence);
+  window.EdgeWS.on('typing', onTyping);
+  window.EdgeWS.on('seen', onSeen);
+  window.EdgeWS.on('deleted', onDeleted);
+  window.EdgeWS.on('groups_changed', function () { loadGroups().then(refreshGroupHeader); });
+  window.EdgeWS.on('error', function (d) { alert(d.error); });
+  window.EdgeWS.on('visible', function () {   // tab came to the front: now the messages are really seen
+    if (!pendingRead || document.hidden || !active) return;
+    pendingRead = false;
+    wsSend(active.kind === 'user' ? { type: 'read', peer: active.id } : { type: 'read_group', group: active.id });
+  });
+  function markRead(kind, id) {
+    if (document.hidden) { pendingRead = true; return; }     // not looking yet: no "seen" tick
+    wsSend(kind === 'user' ? { type: 'read', peer: id } : { type: 'read_group', group: id });
   }
   function onMessage(m) {
     var peerId = m.sender === ME ? m.recipient : m.sender, p = peerById(peerId);
@@ -195,7 +197,7 @@
     peers.splice(peers.indexOf(p), 1); peers.unshift(p);
     if (active && active.kind === 'user' && active.id === peerId) {
       addBubble(m); scrollDown();
-      if (m.sender !== ME) wsSend({ type: 'read', peer: peerId });
+      if (m.sender !== ME) markRead('user', peerId);
       $('t-typing').hidden = true;
     } else if (m.sender !== ME) { p.unread = (p.unread || 0) + 1; }
     if (mode === 'people') renderList();
@@ -208,7 +210,7 @@
     groups.splice(groups.indexOf(g), 1); groups.unshift(g);
     if (active && active.kind === 'group' && active.id === m.group) {
       addBubble(m); scrollDown();
-      if (m.sender !== ME) wsSend({ type: 'read_group', group: m.group });
+      if (m.sender !== ME) markRead('group', m.group);
     } else if (m.sender !== ME) { g.unread = (g.unread || 0) + 1; }
     if (mode === 'groups') renderList();
   }
@@ -236,7 +238,6 @@
     var b = bubbles[d.id]; if (b) setGone(b);
     loadPeers(); loadGroups();            // refresh the "last message" previews
   }
-  setInterval(function () { if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'ping' })); }, 25000);
 
   function send() {
     var box = $('t-input'), body = box.value.trim();
@@ -365,10 +366,11 @@
   $('g-new').addEventListener('click', newGroupModal);
   $('t-members').addEventListener('click', membersModal);
 
+  window.EdgeOpen = function (kind, id) { return kind === 'group' ? openGroup(id) : openPeer(id); };
+
   // ================= start =================
   var w = parseInt(root.dataset.with, 10), gq = parseInt(root.dataset.group, 10);
   Promise.all([loadPeers(), loadGroups()]).then(function () {
     if (gq) openGroup(gq); else if (w) openPeer(w);
   });
-  connect();
 })();

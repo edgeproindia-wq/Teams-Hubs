@@ -3,13 +3,14 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{% block title %}EdgeChat{% endblock %}</title>
 <link rel="stylesheet" href="{% static 'chat/app.css' %}">
-</head><body class="app-body">
+</head><body class="app-body" data-me="{{ user.id }}" data-ws="{% if user.must_change_password %}0{% else %}1{% endif %}">
 <div class="app">
   <header class="hdr">
     <div class="hbrand"><span class="logo">E</span>
       <div><b>EdgeChat</b><small>{{ user.company.name }}</small></div></div>
     <div class="hright">
       <span class="conn-pill"><i class="dot on" id="net-dot"></i><span id="net-text">Connected</span></span>
+      <button class="hbtn" id="notif-btn" type="button" hidden>Enable alerts</button>
       <span class="hname">{{ user.display_name }}</span>
       <a class="hbtn" href="{% url 'password_change' %}">Change password</a>
       <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="hbtn" type="submit">Log out</button></form>
@@ -49,6 +50,7 @@
     <span>EdgeChat v1.0</span>
   </footer>
 </div>
+<div id="toasts" class="toasts"></div>
 <script src="{% static 'chat/shell.js' %}"></script>
 {% block scripts %}{% endblock %}
 </body></html>

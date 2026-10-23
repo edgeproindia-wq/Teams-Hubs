@@ -143,6 +143,7 @@ class Message(models.Model):
             "sender_name": self.sender.display_name,
             "recipient": self.recipient_id,
             "group": self.group_id,
+            "group_name": self.group.name if self.group_id else "",
             "body": "" if self.is_deleted else self.body,
             "deleted": self.is_deleted,
             "read": self.read_at is not None,

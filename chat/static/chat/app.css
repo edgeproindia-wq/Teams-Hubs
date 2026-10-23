@@ -148,3 +148,10 @@ label{display:block;font-weight:600;font-size:13px;margin:10px 0 0}
 .btn.danger{background:#fff;border-color:#f1b4b4;color:#b42318}.btn.danger:hover{background:#fee2e2}
 .panel.narrow{max-width:460px}.steps{padding-left:20px;line-height:1.9}
 code.code.sm{font-size:13px;letter-spacing:1px;padding:2px 8px}
+/* message pop-ups */
+.toasts{position:fixed;right:18px;bottom:50px;z-index:60;display:flex;flex-direction:column;gap:10px;width:min(340px,92vw)}
+.toast{background:#fff;border:1px solid var(--line);border-left:5px solid var(--blue);border-radius:12px;box-shadow:0 8px 28px rgba(20,40,80,.25);padding:12px 34px 12px 14px;cursor:pointer;position:relative;animation:tin .25s ease-out}
+.toast b{display:block;color:var(--blue-d)}
+.toast span{display:block;color:#33466b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.toast .tx{position:absolute;top:6px;right:8px;border:0;background:none;font-size:20px;line-height:1;color:#7d8fae;cursor:pointer}
+@keyframes tin{from{transform:translateY(10px);opacity:0}to{transform:none;opacity:1}}

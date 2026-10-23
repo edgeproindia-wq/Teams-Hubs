@@ -292,7 +292,7 @@ def api_group_detail(request, gid):
     members = [{"id": m.user_id, "name": m.user.display_name, "initials": m.user.initials,
                 "job_title": m.user.job_title, "online": m.user.is_online}
                for m in GroupMember.objects.filter(group=g).select_related("user").order_by("joined_at")]
-    msgs = Message.objects.filter(group=g).select_related("sender").order_by("-created_at")[:200]
+    msgs = Message.objects.filter(group=g).select_related("sender", "group").order_by("-created_at")[:200]
     GroupMember.objects.filter(pk=ms.pk).update(last_read_at=timezone.now())
     return JsonResponse({
         "group": {"id": g.id, "name": g.name, "initials": g.initials, "owner_id": g.created_by_id,

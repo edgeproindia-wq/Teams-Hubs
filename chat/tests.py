@@ -575,7 +575,8 @@ class LiveFeatureTests(TransactionTestCase):
         await c1.send_json_to({"type": "group_message", "group": self.g.id, "body": "hello team"})
         got2 = [m for m in await self._drain(c2) if m["type"] == "message"]
         got1 = [m for m in await self._drain(c1) if m["type"] == "message"]
-        self.assertEqual((got2[0]["body"], got2[0]["group"], got2[0]["sender_name"]), ("hello team", self.g.id, "One User"))
+        self.assertEqual((got2[0]["body"], got2[0]["group"], got2[0]["sender_name"], got2[0]["group_name"]),
+                         ("hello team", self.g.id, "One User", "Team"))
         self.assertEqual(got1[0]["body"], "hello team")
         self.assertEqual([m for m in await self._drain(c3) if m["type"] == "message"], [])
         m = await Message.objects.aget(body="hello team")
