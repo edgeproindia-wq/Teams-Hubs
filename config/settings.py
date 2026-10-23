@@ -77,7 +77,10 @@ if _db_url:
     except Exception:
         raise ImproperlyConfigured(
             "DATABASE_URL is not a valid address. It looks like a placeholder (for example ...@HOST:PORT/...) "
-            "or has special characters. Copy it again with the copy icon on your Render PostgreSQL page.") from None
+            "or has special characters. Copy it again with the copy icon on your Render PostgreSQL page. "
+            "Shape of your value (letters=x, digits=9): "
+            + "".join("x" if c.isalpha() else "9" if c.isdigit() else "[space]" if c == " "
+                      else "[newline]" if c in "\r\n" else c for c in _db_url[:300])) from None
     if _db_url.startswith(("postgres://", "postgresql://")):
         DATABASES["default"].setdefault("OPTIONS", {})["connect_timeout"] = 10
 elif DEBUG or "collectstatic" in sys.argv or "test" in sys.argv:
